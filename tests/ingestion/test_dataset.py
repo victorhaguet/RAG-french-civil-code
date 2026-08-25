@@ -1,4 +1,4 @@
-from rag_french_civil_code.ingestion.dataset import KEPT_FIELDS, load_articles
+from src.ingestion.dataset import KEPT_FIELDS, load_articles
 from tests.factories import raw_row as _raw_row
 
 

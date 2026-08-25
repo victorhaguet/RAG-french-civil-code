@@ -1,4 +1,4 @@
-from rag_french_civil_code.retrieval.embeddings import MultilingualE5Embeddings
+from src.retrieval.embeddings import MultilingualE5Embeddings
 
 
 class FakeModel:

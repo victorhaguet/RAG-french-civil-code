@@ -2,7 +2,7 @@ from pathlib import Path
 
 from langchain_core.embeddings import Embeddings
 
-from rag_french_civil_code.ingestion.pipeline import run_ingestion
+from src.ingestion.pipeline import run_ingestion
 from tests.factories import raw_row as _base_raw_row
 
 

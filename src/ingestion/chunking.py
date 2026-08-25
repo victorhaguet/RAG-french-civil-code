@@ -7,7 +7,7 @@ from collections.abc import Iterable
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-from rag_french_civil_code.ingestion.dataset import KEPT_FIELDS, Article
+from src.ingestion.dataset import KEPT_FIELDS, Article
 
 CHUNK_SIZE = 800
 CHUNK_OVERLAP = 100
@@ -28,6 +28,12 @@ def chunk_article(article: Article) -> list[Document]:
     An Article whose text fits in one chunk yields a single Document
     (`{ref}#0`); a longer one yields several (`{ref}#0`, `{ref}#1`, ...),
     each carrying its own copy of the Article's metadata.
+
+    Args:
+        article (Article): article to split
+
+    Returns:
+        list[Document]: list of chunks extracted from the article
     """
     chunks_text = _splitter.split_text(article["texte"])
     return [
@@ -41,7 +47,14 @@ def chunk_article(article: Article) -> list[Document]:
 
 
 def build_documents(articles: Iterable[Article]) -> list[Document]:
-    """Chunk every Article into the full list of vectorstore Documents."""
+    """Chunk every Article into the full list of vectorstore Documents.
+
+    Args:
+        articles (Iterable[Article]): articles to transform to chunks
+
+    Returns:
+        list[Document]: List of chunks (ready to be embedded)
+    """
     documents: list[Document] = []
     for article in articles:
         documents.extend(chunk_article(article))

@@ -1,5 +1,5 @@
-from rag_french_civil_code.ingestion.chunking import build_documents, chunk_article
-from rag_french_civil_code.ingestion.dataset import Article
+from src.ingestion.chunking import build_documents, chunk_article
+from src.ingestion.dataset import Article
 
 
 def _article(**overrides: object) -> Article:

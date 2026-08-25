@@ -7,10 +7,10 @@ from collections.abc import Iterable
 from langchain_chroma import Chroma
 from langchain_core.embeddings import Embeddings
 
-from rag_french_civil_code import config
-from rag_french_civil_code.ingestion.chunking import build_documents
-from rag_french_civil_code.ingestion.dataset import load_articles
-from rag_french_civil_code.retrieval.embeddings import MultilingualE5Embeddings
+from src import config
+from src.ingestion.chunking import build_documents
+from src.ingestion.dataset import load_articles
+from src.retrieval.embeddings import MultilingualE5Embeddings
 
 
 def run_ingestion(
@@ -24,6 +24,15 @@ def run_ingestion(
 
     Pass `raw_rows` and/or `embeddings` to run against a fixture dataset and
     a fake embedder in tests, bypassing the network and the real model.
+
+    Args:
+        raw_rows (Iterable[dict] | None, optional): Set custom raw rows for test purposes. Defaults to None.
+        embeddings (Embeddings | None, optional): Set custom embeddings for test purposes. Defaults to None.
+        persist_directory (str | None, optional): Directory to save the chroma.db vectorstore. Defaults to None.
+        collection_name (str | None, optional): Name of the collection. Defaults to None.
+
+    Returns:
+        Chroma: the rebuilt collection, containing every ingested Chunk.
     """
     articles = load_articles(raw_rows=raw_rows)
     documents = build_documents(articles)

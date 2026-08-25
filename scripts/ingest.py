@@ -3,8 +3,8 @@
 Usage: uv run scripts/ingest.py
 """
 
-from rag_french_civil_code import config
-from rag_french_civil_code.ingestion.pipeline import run_ingestion
+from src import config
+from src.ingestion.pipeline import run_ingestion
 
 
 def main() -> None:

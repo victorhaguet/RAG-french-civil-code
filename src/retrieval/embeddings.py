@@ -35,15 +35,38 @@ class MultilingualE5Embeddings(Embeddings):
 
     @staticmethod
     def _load_default_model() -> Any:
+        # Imported lazily so constructing this class with an injected test
+        # double (as every test does) never pays sentence-transformers'
+        # heavy import cost.
         from sentence_transformers import SentenceTransformer
 
         return SentenceTransformer(MODEL_NAME)
 
     def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        """
+        Embed documents into vectors
+
+        Args:
+            texts (list[str]): Texts to embed
+        
+        Returns:
+            list[list[float]]: List of obtained vectors 
+        """
         embeddings = self._model.encode(texts, normalize_embeddings=True)
         return [list(vector) for vector in embeddings]
 
     def embed_query(self, text: str) -> list[float]:
+        """Embed a query
+
+        This time, the query is embedded with a default instruction (specific to
+        intfloat/multilingual-e5-large-instruct)
+
+        Args:
+            text (str): Query to embed
+
+        Returns:
+            list[float]: Vector obtained
+        """
         instructed = f"Instruct: {DEFAULT_QUERY_INSTRUCTION}\nQuery: {text}"
         [embedding] = self._model.encode([instructed], normalize_embeddings=True)
         return list(embedding)
