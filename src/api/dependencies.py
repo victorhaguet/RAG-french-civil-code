@@ -14,11 +14,16 @@ from langchain_chroma import Chroma
 
 from src import config
 from src.retrieval.embeddings import MultilingualE5Embeddings
+from src.generation.chat import build_chat_model
 
 
 @lru_cache
 def get_store() -> Chroma:
-    """The Chroma collection built by the ingestion pipeline."""
+    """The Chroma collection built by the ingestion pipeline.
+    
+    Note: Use the @lru_cache to avoid reloading the sentence-transformer 
+    model every time the function is called.
+    """
     return Chroma(
         collection_name=config.CHROMA_COLLECTION_NAME,
         embedding_function=MultilingualE5Embeddings(),
@@ -35,6 +40,4 @@ def get_chat_model() -> Any:
     that overrides this dependency with a fake in tests, so its type can't
     be named here without eagerly importing it.
     """
-    from src.generation.chat import build_chat_model
-
     return build_chat_model()
