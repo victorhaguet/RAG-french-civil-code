@@ -1,0 +1,7 @@
+Question : {{ question }}
+
+Articles :
+{% for chunk in chunks -%}
+- Article {{ chunk.metadata.ref }} : {{ chunk.page_content }}
+{% endfor %}
+Réponse :

@@ -2,9 +2,8 @@
 
 The model is asymmetric: document/passage text is embedded with no
 instruction prefix, while queries need one (`"Instruct: {task}\\nQuery:
-{query}"`) to retrieve well. Ticket 1 only needs the document side; the
-query side here uses a fixed French instruction as a placeholder until the
-query pipeline (Ticket 2) adapts it to the detected query language.
+{query}"`) to retrieve well. The instruction text is adapted to the query's
+detected language (French/English, French fallback), via Lingua.
 """
 
 from __future__ import annotations
@@ -13,12 +12,20 @@ from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
+from src.retrieval.language import detect_query_language
+
 MODEL_NAME = "intfloat/multilingual-e5-large-instruct"
 
-DEFAULT_QUERY_INSTRUCTION = (
-    "Étant donné une question juridique, retrouve les articles du Code "
-    "civil pertinents pour y répondre."
-)
+QUERY_INSTRUCTIONS = {
+    "fr": (
+        "Étant donné une question juridique, retrouve les articles du Code "
+        "civil pertinents pour y répondre."
+    ),
+    "en": (
+        "Given a legal question, retrieve the Code civil articles relevant "
+        "to answering it."
+    ),
+}
 
 
 class MultilingualE5Embeddings(Embeddings):
@@ -56,10 +63,11 @@ class MultilingualE5Embeddings(Embeddings):
         return [list(vector) for vector in embeddings]
 
     def embed_query(self, text: str) -> list[float]:
-        """Embed a query
+        """Embed a query.
 
-        This time, the query is embedded with a default instruction (specific to
-        intfloat/multilingual-e5-large-instruct)
+        The query is embedded with an instruction prefix (specific to
+        intfloat/multilingual-e5-large-instruct) adapted to the query's
+        detected language.
 
         Args:
             text (str): Query to embed
@@ -67,6 +75,7 @@ class MultilingualE5Embeddings(Embeddings):
         Returns:
             list[float]: Vector obtained
         """
-        instructed = f"Instruct: {DEFAULT_QUERY_INSTRUCTION}\nQuery: {text}"
+        instruction = QUERY_INSTRUCTIONS[detect_query_language(text)]
+        instructed = f"Instruct: {instruction}\nQuery: {text}"
         [embedding] = self._model.encode([instructed], normalize_embeddings=True)
         return list(embedding)

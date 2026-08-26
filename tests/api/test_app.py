@@ -1,0 +1,193 @@
+from pathlib import Path
+
+import pytest
+from fastapi.testclient import TestClient
+
+from src.api.app import app
+from src.api.dependencies import get_chat_model, get_store
+from src.ingestion.pipeline import run_ingestion
+from src.retrieval.embeddings import QUERY_INSTRUCTIONS, MultilingualE5Embeddings
+from tests.factories import raw_row
+from tests.fakes import FakeChatModel, FakeModel
+
+
+@pytest.fixture(autouse=True)
+def _clear_dependency_overrides():
+    yield
+    app.dependency_overrides.clear()
+
+
+def _populate_store(tmp_path: Path, model: FakeModel, rows: list[dict] | None = None):
+    rows = rows or [
+        raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR"),
+        raw_row(ref="A2", texte="Repealed provision, no longer applicable.", etat="ABROGE_DIFF"),
+    ]
+    return run_ingestion(
+        raw_rows=rows,
+        embeddings=MultilingualE5Embeddings(model=model),
+        persist_directory=str(tmp_path / "chroma"),
+        collection_name="test_collection",
+    )
+
+
+def _client_for(store, chat_model: FakeChatModel) -> TestClient:
+    app.dependency_overrides[get_store] = lambda: store
+    app.dependency_overrides[get_chat_model] = lambda: chat_model
+    return TestClient(app)
+
+
+def _client(tmp_path: Path, model: FakeModel, chat_model: FakeChatModel) -> TestClient:
+    return _client_for(_populate_store(tmp_path, model), chat_model)
+
+
+def test_health_returns_a_liveness_check() -> None:
+    client = TestClient(app)
+
+    response = client.get("/health")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_query_returns_the_generated_answer_and_retrieved_chunks_with_metadata(
+    tmp_path: Path,
+) -> None:
+    model = FakeModel()
+    chat_model = FakeChatModel(answer="Voici la réponse.")
+    client = _client(tmp_path, model, chat_model)
+
+    response = client.post("/query", json={"question": "Quand une loi entre-t-elle en vigueur ?"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "Voici la réponse."
+    assert body["chunks"] == [
+        {
+            "id": "A1#0",
+            "text": "Les lois s'appliquent dès leur entrée en vigueur.",
+            "metadata": {
+                "ref": "A1",
+                "dateDebut": 1086048000000,
+                "dateFin": 32472144000000,
+                "etat": "VIGUEUR",
+                "version_article": "2.0",
+                "origine": "LEGI",
+                "sectionParentTitre": (
+                    "Titre préliminaire : De la publication, des effets et de "
+                    "l'application des lois en général"
+                ),
+            },
+        }
+    ]
+    # Only the VIGUEUR article was ingested, so it's the only possible result.
+    [prompt] = chat_model.invoke_calls
+    assert "Quand une loi entre-t-elle en vigueur ?" in prompt
+    assert "Les lois s'appliquent dès leur entrée en vigueur." in prompt
+    assert "A1" in prompt
+
+
+def test_query_only_ever_retrieves_from_the_in_force_article(tmp_path: Path) -> None:
+    model = FakeModel()
+    chat_model = FakeChatModel()
+    client = _client(tmp_path, model, chat_model)
+
+    response = client.post("/query", json={"question": "Quelle est la loi applicable ?"})
+
+    [chunk] = response.json()["chunks"]
+    assert chunk["metadata"]["etat"] == "VIGUEUR"
+
+
+def test_query_with_a_french_question_embeds_with_the_french_instruction(tmp_path: Path) -> None:
+    model = FakeModel()
+    client = _client(tmp_path, model, FakeChatModel())
+
+    client.post("/query", json={"question": "Quand une loi entre-t-elle en vigueur ?"})
+
+    [instructed_text] = model.encode_calls[-1]
+    assert instructed_text.startswith(f"Instruct: {QUERY_INSTRUCTIONS['fr']}")
+
+
+def test_query_with_an_english_question_embeds_with_the_english_instruction(
+    tmp_path: Path,
+) -> None:
+    model = FakeModel()
+    client = _client(tmp_path, model, FakeChatModel())
+
+    client.post("/query", json={"question": "When does a law enter into force?"})
+
+    [instructed_text] = model.encode_calls[-1]
+    assert instructed_text.startswith(f"Instruct: {QUERY_INSTRUCTIONS['en']}")
+
+
+def test_query_with_an_unrecognized_language_falls_back_to_the_french_instruction(
+    tmp_path: Path,
+) -> None:
+    model = FakeModel()
+    client = _client(tmp_path, model, FakeChatModel())
+
+    client.post("/query", json={"question": "いつ法律は施行されますか？"})
+
+    [instructed_text] = model.encode_calls[-1]
+    assert instructed_text.startswith(f"Instruct: {QUERY_INSTRUCTIONS['fr']}")
+
+
+def _populate_store_with_two_in_force_articles(tmp_path: Path, model: FakeModel):
+    rows = [
+        raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR"),
+        raw_row(
+            ref="A3",
+            texte=(
+                "Le mariage est un acte solennel entre deux personnes qui "
+                "s'engagent mutuellement à une communauté de vie, avec des "
+                "droits et devoirs réciproques prévus par la loi civile."
+            ),
+            etat="VIGUEUR",
+        ),
+    ]
+    return _populate_store(tmp_path, model, rows=rows)
+
+
+def test_query_uses_a_default_top_k_when_none_is_supplied(tmp_path: Path) -> None:
+    model = FakeModel()
+    store = _populate_store_with_two_in_force_articles(tmp_path, model)
+    client = _client_for(store, FakeChatModel())
+
+    response = client.post("/query", json={"question": "Quelle est la loi applicable ?"})
+
+    # Two VIGUEUR articles exist and the default top_k is above that, so
+    # both come back — proving the default doesn't truncate below the corpus.
+    assert response.status_code == 200
+    assert len(response.json()["chunks"]) == 2
+
+
+def test_query_respects_a_caller_supplied_top_k(tmp_path: Path) -> None:
+    model = FakeModel()
+    store = _populate_store_with_two_in_force_articles(tmp_path, model)
+    client = _client_for(store, FakeChatModel())
+
+    response = client.post(
+        "/query", json={"question": "Quelle est la loi applicable ?", "top_k": 1}
+    )
+
+    # A top_k lower than the number of matching Chunks actually truncates.
+    assert response.status_code == 200
+    assert len(response.json()["chunks"]) == 1
+
+
+def test_query_rejects_a_non_positive_top_k(tmp_path: Path) -> None:
+    model = FakeModel()
+    client = _client(tmp_path, model, FakeChatModel())
+
+    response = client.post(
+        "/query", json={"question": "Quelle est la loi applicable ?", "top_k": 0}
+    )
+
+    assert response.status_code == 422
+
+
+def test_no_ingest_route_is_exposed() -> None:
+    client = TestClient(app)
+
+    response = client.post("/ingest")
+
+    assert response.status_code == 404
