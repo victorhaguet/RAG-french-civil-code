@@ -23,3 +23,10 @@ The source dataset's validity-status field for an Article. Only two values occur
 `VIGUEUR` (currently in force) and `ABROGE_DIFF` (repealed, but the repeal takes effect at a future
 date — not yet actually repealed). Ingestion keeps `VIGUEUR` only.
 _Avoid_: Status, state (when referring to this specific field)
+
+**Query Language**:
+The detected language of a user's question — `fr` or `en`, defaulting to `fr` when detection is
+inconclusive or the language is neither. Drives two independent choices: which instruction prefix
+embeds the query for retrieval, and which language the generation prompt template is rendered in.
+Articles themselves are always in French regardless of Query Language.
+_Avoid_: Locale (this only distinguishes fr/en for query interpretation, not full internationalization)
