@@ -15,13 +15,14 @@ from langchain_chroma import Chroma
 from src import config
 from src.retrieval.embeddings import MultilingualE5Embeddings
 from src.generation.chat import build_chat_model
+from src.storage.article_store import ArticleStore
 
 
 @lru_cache
 def get_store() -> Chroma:
     """The Chroma collection built by the ingestion pipeline.
-    
-    Note: Use the @lru_cache to avoid reloading the sentence-transformer 
+
+    Note: Use the @lru_cache to avoid reloading the sentence-transformer
     model every time the function is called.
     """
     return Chroma(
@@ -29,6 +30,16 @@ def get_store() -> Chroma:
         embedding_function=MultilingualE5Embeddings(),
         persist_directory=config.CHROMA_PERSIST_DIR,
     )
+
+
+@lru_cache
+def get_article_store() -> ArticleStore:
+    """The Article store built by the ingestion pipeline.
+
+    Note: Use the @lru_cache to reuse the same SQLite connection across
+    requests instead of reopening the database file every time.
+    """
+    return ArticleStore(config.ARTICLES_DB_PATH)
 
 
 @lru_cache

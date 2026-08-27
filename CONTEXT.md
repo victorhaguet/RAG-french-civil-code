@@ -12,11 +12,14 @@ identified by `ref`. Only Articles whose `etat` is `VIGUEUR` (currently in force
 _Avoid_: Row, record, document (when referring to the source), entry
 
 **Chunk**:
-A sub-portion of an Article's `texte`, produced by splitting when the text exceeds 800 characters.
-Its vectorstore document ID is `{ref}#{n}`, where `n` is its 0-based position within the Article.
-Every Chunk carries a copy of its Article's full metadata. An Article that doesn't need splitting
-is stored as a single Chunk (`{ref}#0`).
-_Avoid_: Segment, piece, split
+A sub-portion of an Article's `texte`, produced by splitting when the text exceeds 800 characters,
+used only to power retrieval (semantic search). Its vectorstore document ID is `{ref}#{n}`, where
+`n` is its 0-based position within the Article. Every Chunk carries a copy of its Article's
+metadata, but never the full `texte` — matching a Chunk only tells you which Article was found;
+resolving that Article's full text is a separate lookup by `ref`. A Chunk never reaches the
+generation prompt directly. An Article that doesn't need splitting is stored as a single Chunk
+(`{ref}#0`).
+_Avoid_: Segment, piece, split, Context (a Chunk is not what the model sees — see Retrieved Articles)
 
 **etat**:
 The source dataset's validity-status field for an Article. Only two values occur in this dataset:
@@ -31,10 +34,17 @@ embeds the query for retrieval, and which language the generation prompt templat
 Articles themselves are always in French regardless of Query Language.
 _Avoid_: Locale (this only distinguishes fr/en for query interpretation, not full internationalization)
 
+**Retrieved Articles**:
+The deduplicated set of Articles assembled for one query: one entry per unique `ref` among the
+top_k retrieved Chunks, in first-seen (highest-relevance) order, even when several Chunks matched
+the same Article. This — full Article text, not Chunk text — is what the generation prompt is
+rendered from.
+_Avoid_: Context, chunks, matches, results
+
 **Grounded Answer**:
 The generation prompt's normal response shape: a direct answer followed by a "Fondement
-juridique"/"Legal basis" section citing only the Chunks the model actually relied on — never
-every retrieved Chunk. Article citations stay in French even in the English template.
+juridique"/"Legal basis" section citing only the Retrieved Articles the model actually relied on —
+never every Retrieved Article. Article citations stay in French even in the English template.
 _Avoid_: Structured answer (doesn't distinguish this from an Out-of-Scope Answer, which is also
 structured, just differently)
 

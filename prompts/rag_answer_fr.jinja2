@@ -4,8 +4,8 @@ fondant exclusivement sur les articles du Code civil fournis ci-dessous.
 Question : {{ question }}
 
 Articles :
-{% for chunk in chunks -%}
-- Article {{ chunk.metadata.ref }} ({{ chunk.metadata.sectionParentTitre }}) : {{ chunk.page_content }}
+{% for article in articles -%}
+- Article {{ article.ref }} ({{ article.sectionParentTitre }}) : {{ article.texte }}
 {% endfor %}
 Si, et seulement si, les articles ci-dessus ne permettent pas de répondre à la question,
 réponds exactement avec le message suivant (sans persona, sans citation) :

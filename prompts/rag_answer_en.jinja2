@@ -6,8 +6,8 @@ official language — only your surrounding explanation should be in English.
 Question: {{ question }}
 
 Articles:
-{% for chunk in chunks -%}
-- Article {{ chunk.metadata.ref }} ({{ chunk.metadata.sectionParentTitre }}): {{ chunk.page_content }}
+{% for article in articles -%}
+- Article {{ article.ref }} ({{ article.sectionParentTitre }}): {{ article.texte }}
 {% endfor %}
 If, and only if, the articles above do not let you answer the question, reply with
 exactly the following message (no persona, no citation):

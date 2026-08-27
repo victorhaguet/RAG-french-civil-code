@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field
 
 DEFAULT_TOP_K = 5
@@ -16,16 +14,32 @@ class QueryRequest(BaseModel):
     top_k: int = Field(default=DEFAULT_TOP_K, gt=0)
 
 
-class ChunkOut(BaseModel):
-    """A retrieved Chunk, as returned to the API consumer."""
+class ArticleOut(BaseModel):
+    """A Retrieved Article, as cited to the API consumer.
 
-    id: str
-    text: str
-    metadata: dict[str, Any]
+    Carries just enough to display and resolve a citation — the full text
+    is fetched separately via `GET /articles/{ref}`.
+    """
+
+    ref: str
+    sectionParentTitre: str
 
 
 class QueryResponse(BaseModel):
-    """The generated answer, grounded in the Chunks it was based on."""
+    """The generated answer, grounded in the Retrieved Articles it cites."""
 
     answer: str
-    chunks: list[ChunkOut]
+    articles: list[ArticleOut]
+
+
+class ArticleDetailOut(BaseModel):
+    """A full Article, as returned by `GET /articles/{ref}`."""
+
+    ref: str
+    texte: str
+    dateDebut: int
+    dateFin: int
+    etat: str
+    version_article: str
+    origine: str
+    sectionParentTitre: str

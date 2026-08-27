@@ -9,5 +9,6 @@ __pycache__/
 # Local secrets
 .env
 
-# Local persistent vectorstore
+# Local persistent vectorstore and Article store
 data/chroma/
+data/articles.db

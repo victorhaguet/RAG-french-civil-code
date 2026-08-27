@@ -11,6 +11,7 @@ from src import config
 from src.ingestion.chunking import build_documents
 from src.ingestion.dataset import load_articles
 from src.retrieval.embeddings import MultilingualE5Embeddings
+from src.storage.article_store import ArticleStore
 
 
 def run_ingestion(
@@ -19,8 +20,9 @@ def run_ingestion(
     embeddings: Embeddings | None = None,
     persist_directory: str | None = None,
     collection_name: str | None = None,
+    sqlite_path: str | None = None,
 ) -> Chroma:
-    """Rebuild the Chroma collection from scratch from the Code civil dataset.
+    """Rebuild the Chroma collection and the Article store from scratch.
 
     Pass `raw_rows` and/or `embeddings` to run against a fixture dataset and
     a fake embedder in tests, bypassing the network and the real model.
@@ -30,12 +32,16 @@ def run_ingestion(
         embeddings (Embeddings | None, optional): Set custom embeddings for test purposes. Defaults to None.
         persist_directory (str | None, optional): Directory to save the chroma.db vectorstore. Defaults to None.
         collection_name (str | None, optional): Name of the collection. Defaults to None.
+        sqlite_path (str | None, optional): Path to the Article store's SQLite file. Defaults to None.
 
     Returns:
         Chroma: the rebuilt collection, containing every ingested Chunk.
     """
     articles = load_articles(raw_rows=raw_rows)
     documents = build_documents(articles)
+
+    article_store = ArticleStore(sqlite_path or config.ARTICLES_DB_PATH)
+    article_store.replace_all(articles)
 
     store = Chroma(
         collection_name=collection_name or config.CHROMA_COLLECTION_NAME,
