@@ -7,6 +7,9 @@ from typing import TypedDict, cast
 
 DATASET_NAME = "louisbrulenaudet/code-civil"
 DATASET_SPLIT = "train"
+# The dataset has no built-in version/timestamp field, so this is a manually
+# tracked snapshot date, updated whenever the corpus is re-ingested.
+DATASET_AS_OF = "21 September 2025"
 
 IN_FORCE_ETAT = "VIGUEUR"
 

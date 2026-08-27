@@ -30,3 +30,17 @@ inconclusive or the language is neither. Drives two independent choices: which i
 embeds the query for retrieval, and which language the generation prompt template is rendered in.
 Articles themselves are always in French regardless of Query Language.
 _Avoid_: Locale (this only distinguishes fr/en for query interpretation, not full internationalization)
+
+**Grounded Answer**:
+The generation prompt's normal response shape: a direct answer followed by a "Fondement
+juridique"/"Legal basis" section citing only the Chunks the model actually relied on — never
+every retrieved Chunk. Article citations stay in French even in the English template.
+_Avoid_: Structured answer (doesn't distinguish this from an Out-of-Scope Answer, which is also
+structured, just differently)
+
+**Out-of-Scope Answer**:
+The generation prompt's fallback response shape, produced instead of a Grounded Answer when no
+retrieved Chunk answers the question. Breaks the "expert in French civil law" persona entirely,
+states plainly that the question can't be answered from retrieval, reminds the user the corpus
+is Code civil only (as of `DATASET_AS_OF`), and invites rephrasing. Cites no Articles.
+_Avoid_: Fallback, no-answer (too vague — doesn't convey that persona is dropped)
