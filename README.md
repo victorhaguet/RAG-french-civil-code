@@ -36,6 +36,15 @@ cp .env.example .env
 `.env` also lets you point `OPENAI_BASE_URL` at any OpenAI-compatible endpoint instead
 of OpenAI itself, and change `OPENAI_MODEL` from the default (`gpt-4o-mini`).
 
+## Embedding model
+
+Articles and questions are embedded with
+[`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small),
+picked so the app runs comfortably on CPU with no GPU required. It's one of the most
+efficient models in the E5 family for its size/quality tradeoff, ranking well on the
+[MTEB](https://huggingface.co/spaces/mteb/leaderboard) leaderboard both for French
+specifically and for multilingual retrieval in general.
+
 ## Running it
 
 Build the vector store and the article database from the dataset (run once, or again

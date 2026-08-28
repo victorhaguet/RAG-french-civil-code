@@ -3,11 +3,14 @@
 Usage: uv run scripts/ingest.py
 """
 
+import logging
+
 from src import config
 from src.ingestion.pipeline import run_ingestion
 
 
 def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
     store = run_ingestion()
     chunk_count = len(store.get()["ids"])
     print(

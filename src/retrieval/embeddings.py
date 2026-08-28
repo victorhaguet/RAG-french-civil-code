@@ -1,9 +1,10 @@
-"""Embeddings for multilingual-e5-large-instruct.
+"""Embeddings for multilingual-e5-small.
 
-The model is asymmetric: document/passage text is embedded with no
-instruction prefix, while queries need one (`"Instruct: {task}\\nQuery:
-{query}"`) to retrieve well. The instruction text is adapted to the query's
-detected language (French/English, French fallback), via Lingua.
+The model is asymmetric: document/passage text is embedded with a
+`"passage: "` prefix, while queries get a `"query: "` prefix — the
+convention this model (and the wider E5 family) was trained on. Unlike the
+`-instruct` E5 variants, these prefixes are fixed and don't vary with the
+query's language.
 """
 
 from __future__ import annotations
@@ -12,20 +13,10 @@ from typing import Any
 
 from langchain_core.embeddings import Embeddings
 
-from src.retrieval.language import detect_query_language
+MODEL_NAME = "intfloat/multilingual-e5-small"
 
-MODEL_NAME = "intfloat/multilingual-e5-large-instruct"
-
-QUERY_INSTRUCTIONS = {
-    "fr": (
-        "Étant donné une question juridique, retrouve les articles du Code "
-        "civil pertinents pour y répondre."
-    ),
-    "en": (
-        "Given a legal question, retrieve the Code civil articles relevant "
-        "to answering it."
-    ),
-}
+DOCUMENT_PREFIX = "passage: "
+QUERY_PREFIX = "query: "
 
 
 class MultilingualE5Embeddings(Embeddings):
@@ -55,19 +46,19 @@ class MultilingualE5Embeddings(Embeddings):
 
         Args:
             texts (list[str]): Texts to embed
-        
+
         Returns:
-            list[list[float]]: List of obtained vectors 
+            list[list[float]]: List of obtained vectors
         """
-        embeddings = self._model.encode(texts, normalize_embeddings=True)
-        return [list(vector) for vector in embeddings]
+        prefixed = [DOCUMENT_PREFIX + text for text in texts]
+        embeddings = self._model.encode(prefixed, normalize_embeddings=True)
+        return [[float(x) for x in vector] for vector in embeddings]
 
     def embed_query(self, text: str) -> list[float]:
         """Embed a query.
 
-        The query is embedded with an instruction prefix (specific to
-        intfloat/multilingual-e5-large-instruct) adapted to the query's
-        detected language.
+        The query is embedded with the `"query: "` prefix this model
+        expects (specific to intfloat/multilingual-e5-small).
 
         Args:
             text (str): Query to embed
@@ -75,7 +66,5 @@ class MultilingualE5Embeddings(Embeddings):
         Returns:
             list[float]: Vector obtained
         """
-        instruction = QUERY_INSTRUCTIONS[detect_query_language(text)]
-        instructed = f"Instruct: {instruction}\nQuery: {text}"
-        [embedding] = self._model.encode([instructed], normalize_embeddings=True)
-        return list(embedding)
+        [embedding] = self._model.encode([QUERY_PREFIX + text], normalize_embeddings=True)
+        return [float(x) for x in embedding]

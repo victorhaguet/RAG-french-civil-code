@@ -8,7 +8,7 @@ from src.api.app import _unique_articles, app
 from src.api.dependencies import get_article_store, get_chat_model, get_store
 from src.ingestion.dataset import to_article
 from src.ingestion.pipeline import run_ingestion
-from src.retrieval.embeddings import QUERY_INSTRUCTIONS, MultilingualE5Embeddings
+from src.retrieval.embeddings import MultilingualE5Embeddings
 from src.storage.article_store import ArticleStore
 from tests.factories import raw_row
 from tests.fakes import FakeChatModel, FakeModel
@@ -96,38 +96,14 @@ def test_query_only_ever_retrieves_from_the_in_force_article(tmp_path: Path) -> 
     assert article["ref"] == "A1"
 
 
-def test_query_with_a_french_question_embeds_with_the_french_instruction(tmp_path: Path) -> None:
+def test_query_embeds_the_question_with_the_query_prefix(tmp_path: Path) -> None:
     model = FakeModel()
     client = _client(tmp_path, model, FakeChatModel())
 
     client.post("/query", json={"question": "Quand une loi entre-t-elle en vigueur ?"})
 
-    [instructed_text] = model.encode_calls[-1]
-    assert instructed_text.startswith(f"Instruct: {QUERY_INSTRUCTIONS['fr']}")
-
-
-def test_query_with_an_english_question_embeds_with_the_english_instruction(
-    tmp_path: Path,
-) -> None:
-    model = FakeModel()
-    client = _client(tmp_path, model, FakeChatModel())
-
-    client.post("/query", json={"question": "When does a law enter into force?"})
-
-    [instructed_text] = model.encode_calls[-1]
-    assert instructed_text.startswith(f"Instruct: {QUERY_INSTRUCTIONS['en']}")
-
-
-def test_query_with_an_unrecognized_language_falls_back_to_the_french_instruction(
-    tmp_path: Path,
-) -> None:
-    model = FakeModel()
-    client = _client(tmp_path, model, FakeChatModel())
-
-    client.post("/query", json={"question": "いつ法律は施行されますか？"})
-
-    [instructed_text] = model.encode_calls[-1]
-    assert instructed_text.startswith(f"Instruct: {QUERY_INSTRUCTIONS['fr']}")
+    [prefixed_text] = model.encode_calls[-1]
+    assert prefixed_text == "query: Quand une loi entre-t-elle en vigueur ?"
 
 
 def _populate_with_two_in_force_articles(tmp_path: Path, model: FakeModel):
