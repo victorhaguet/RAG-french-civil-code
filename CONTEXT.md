@@ -29,9 +29,11 @@ _Avoid_: Status, state (when referring to this specific field)
 
 **Query Language**:
 The detected language of a user's question — `fr` or `en`, defaulting to `fr` when detection is
-inconclusive or the language is neither. Drives two independent choices: which instruction prefix
-embeds the query for retrieval, and which language the generation prompt template is rendered in.
-Articles themselves are always in French regardless of Query Language.
+inconclusive or the language is neither. Always drives which language the generation prompt
+template is rendered in. Also drives the query's embedding instruction prefix, for embedding
+models that use language-dependent instructions (the default); models with a fixed prefix
+convention ignore it for embedding. Articles themselves are always in French regardless of Query
+Language.
 _Avoid_: Locale (this only distinguishes fr/en for query interpretation, not full internationalization)
 
 **Retrieved Articles**:

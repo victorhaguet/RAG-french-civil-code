@@ -8,7 +8,7 @@ from src.api.app import _unique_articles, app
 from src.api.dependencies import get_article_store, get_chat_model, get_store
 from src.ingestion.dataset import to_article
 from src.ingestion.pipeline import run_ingestion
-from src.retrieval.embeddings import MultilingualE5Embeddings
+from src.retrieval.embeddings import FIXED_PREFIX_MODEL, MultilingualE5Embeddings
 from src.storage.article_store import ArticleStore
 from tests.factories import raw_row
 from tests.fakes import FakeChatModel, FakeModel
@@ -27,7 +27,11 @@ def _populate(tmp_path: Path, model: FakeModel, rows: list[dict] | None = None):
     ]
     chroma_store = run_ingestion(
         raw_rows=rows,
-        embeddings=MultilingualE5Embeddings(model=model),
+        # Pinned to the fixed-prefix model regardless of config.EMBEDDING_MODEL:
+        # these tests exercise the API's wiring, not embedding-prefix behavior
+        # (covered by tests/retrieval/test_embeddings.py), and a fixed prefix
+        # keeps them deterministic without exercising real language detection.
+        embeddings=MultilingualE5Embeddings(model=model, model_name=FIXED_PREFIX_MODEL),
         persist_directory=str(tmp_path / "chroma"),
         collection_name="test_collection",
         sqlite_path=str(tmp_path / "articles.db"),
