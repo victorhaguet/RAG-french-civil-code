@@ -51,6 +51,18 @@ class ArticleStore:
                 rows,
             )
 
+    def all(self) -> list[Article]:
+        """Every stored Article.
+
+        Returns:
+            list[Article]: every Article currently in the store.
+        """
+        cursor = self._connection.execute(f"SELECT {', '.join(KEPT_FIELDS)} FROM articles")
+        return [
+            cast(Article, dict(zip(KEPT_FIELDS, row, strict=True)))
+            for row in cursor.fetchall()
+        ]
+
     def get(self, ref: str) -> Article | None:
         """Resolve a `ref` to its full Article.
 

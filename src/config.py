@@ -16,3 +16,14 @@ ARTICLES_DB_PATH = os.getenv("ARTICLES_DB_PATH", "data/articles.db")
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+
+# Hybrid retrieval: each index fetches `max(FETCH_K_MULTIPLIER * top_k, MIN_FETCH_K)`
+# candidates before fusion, so the fused pool is meaningfully larger than top_k.
+FETCH_K_MULTIPLIER = 4
+MIN_FETCH_K = 20
+
+# Weighted Reciprocal Rank Fusion: per-index trust, tunable independently
+# without touching fusion logic itself.
+RRF_K = 60
+RRF_WEIGHT_BM25 = 1.0
+RRF_WEIGHT_VECTOR = 1.0

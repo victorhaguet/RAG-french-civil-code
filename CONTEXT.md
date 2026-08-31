@@ -34,11 +34,25 @@ embeds the query for retrieval, and which language the generation prompt templat
 Articles themselves are always in French regardless of Query Language.
 _Avoid_: Locale (this only distinguishes fr/en for query interpretation, not full internationalization)
 
+**Keyword Index**:
+A `rank_bm25` index over every Article's full `texte` (not Chunks — BM25 has no fixed-context-window
+constraint the way embeddings do). Built lazily in memory from the `ArticleStore` on first use; never
+persisted to disk or touched by `scripts/ingest.py`. Tokenization is lowercase + regex word split,
+then French Snowball stemming and French stopword removal via `nltk`. Queried alongside the vector
+index as one half of Hybrid Retrieval.
+_Avoid_: BM25 index (Keyword Index is the domain term; BM25 is its implementation)
+
+**Candidate Articles**:
+The deduplicated, Article-ranked result of Hybrid Retrieval: the Keyword Index and the vector index
+are each queried for `fetch_k` candidates, and their two ranked lists are fused into one via weighted
+Reciprocal Rank Fusion, deduplicated by `ref`. Truncated to `top_k`, this becomes the Retrieved
+Articles.
+_Avoid_: Fused results, hybrid results
+
 **Retrieved Articles**:
-The deduplicated set of Articles assembled for one query: one entry per unique `ref` among the
-top_k retrieved Chunks, in first-seen (highest-relevance) order, even when several Chunks matched
-the same Article. This — full Article text, not Chunk text — is what the generation prompt is
-rendered from.
+The Candidate Articles, truncated to `top_k`, that ground the generation prompt — full Article text,
+not Chunk text. Currently the fused/deduplicated/truncated Hybrid Retrieval order stands as-is; a
+Reranker that reorders Candidate Articles into this final order is a separate, not-yet-landed piece.
 _Avoid_: Context, chunks, matches, results
 
 **Grounded Answer**:
