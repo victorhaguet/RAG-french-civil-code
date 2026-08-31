@@ -24,6 +24,25 @@ class FakeModel:
         return np.array([[float(len(text))] for text in texts], dtype=np.float32)
 
 
+class FakeCrossEncoder:
+    """Records the pairs it was asked to score; returns one fake score per pair.
+
+    The score is derived from the input (`(query, document)` text length),
+    like `FakeModel` derives its fake vectors from text length, so tests can
+    assert on a specific reranked order without hardcoding opaque numbers.
+    """
+
+    def __init__(self) -> None:
+        self.predict_calls: list[list[tuple[str, str]]] = []
+
+    def predict(self, pairs: list[tuple[str, str]]) -> Any:
+        self.predict_calls.append(list(pairs))
+        return np.array(
+            [float(len(query) + len(document)) for query, document in pairs],
+            dtype=np.float32,
+        )
+
+
 class FakeChatModel:
     """Records the prompts it was asked to answer; returns a canned reply."""
 

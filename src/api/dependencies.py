@@ -15,6 +15,7 @@ from langchain_chroma import Chroma
 from src import config
 from src.retrieval.embeddings import MultilingualE5Embeddings
 from src.retrieval.keyword_index import KeywordIndex
+from src.retrieval.reranker import Reranker
 from src.generation.chat import build_chat_model
 from src.storage.article_store import ArticleStore
 
@@ -51,6 +52,16 @@ def get_bm25_index() -> KeywordIndex:
     built on first `.search()` call) is built at most once per process.
     """
     return KeywordIndex(get_article_store())
+
+
+@lru_cache
+def get_reranker() -> Reranker:
+    """The cross-encoder Reranker used to reorder Hybrid Retrieval's Candidate Articles.
+
+    Note: Use the @lru_cache to avoid reloading the cross-encoder model every
+    time the function is called.
+    """
+    return Reranker()
 
 
 @lru_cache

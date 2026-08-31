@@ -9,12 +9,19 @@ from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 from src import config
-from src.api.dependencies import get_article_store, get_bm25_index, get_chat_model, get_store
+from src.api.dependencies import (
+    get_article_store,
+    get_bm25_index,
+    get_chat_model,
+    get_reranker,
+    get_store,
+)
 from src.api.schemas import ArticleDetailOut, ArticleOut, QueryRequest, QueryResponse
 from src.generation.prompt import render_prompt
 from src.ingestion.dataset import Article
 from src.retrieval.fusion import reciprocal_rank_fusion
 from src.retrieval.keyword_index import KeywordIndex
+from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
 
 app = FastAPI()
@@ -89,8 +96,9 @@ def query(
     chat_model: Any = Depends(get_chat_model),
     article_store: ArticleStore = Depends(get_article_store),
     keyword_index: KeywordIndex = Depends(get_bm25_index),
+    reranker: Reranker = Depends(get_reranker),
 ) -> QueryResponse:
-    """Retrieve the most relevant Articles via Hybrid Retrieval and generate a grounded answer.
+    """Retrieve the most relevant Articles via Hybrid Retrieval, rerank, and generate a grounded answer.
 
     Args:
         request (QueryRequest): Query request received from the user
@@ -98,6 +106,7 @@ def query(
         chat_model (Any, optional): LLM. Defaults to Depends(get_chat_model).
         article_store (ArticleStore, optional): SQL article store. Defaults to Depends(get_article_store).
         keyword_index (KeywordIndex, optional): BM25 keyword index. Defaults to Depends(get_bm25_index).
+        reranker (Reranker, optional): cross-encoder Reranker. Defaults to Depends(get_reranker).
 
     Returns:
         QueryResponse: the generated answer and the Retrieved Articles it cites
@@ -113,7 +122,8 @@ def query(
         weights=[config.RRF_WEIGHT_BM25, config.RRF_WEIGHT_VECTOR],
         k=config.RRF_K,
     )
-    articles = _resolve_articles(candidate_refs[: request.top_k], article_store)
+    candidate_articles = _resolve_articles(candidate_refs, article_store)
+    articles = reranker.rerank(request.question, candidate_articles)[: request.top_k]
 
     prompt = render_prompt(question=request.question, articles=articles)
     answer = chat_model.invoke(prompt).content
