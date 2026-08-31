@@ -58,6 +58,23 @@ def test_replace_all_rebuilds_from_scratch_dropping_previous_articles(tmp_path: 
     assert store.get("A2") is None
 
 
+def test_all_returns_every_stored_article(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+    articles = [
+        to_article(raw_row(ref="A1", texte="Premier texte.")),
+        to_article(raw_row(ref="A2", texte="Second texte.")),
+    ]
+    store.replace_all(articles)
+
+    assert {article["ref"] for article in store.all()} == {"A1", "A2"}
+
+
+def test_all_returns_an_empty_list_when_the_store_is_empty(tmp_path: Path) -> None:
+    store = _store(tmp_path)
+
+    assert store.all() == []
+
+
 def test_reopening_the_same_path_sees_previously_persisted_articles(tmp_path: Path) -> None:
     path = str(tmp_path / "articles.db")
     ArticleStore(path).replace_all([to_article(raw_row(ref="A1", texte="Persisted text."))])

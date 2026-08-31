@@ -4,14 +4,34 @@ import pytest
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 
-from src.api.app import _unique_articles, app
-from src.api.dependencies import get_article_store, get_chat_model, get_store
+from src.api.app import _ranked_refs_from_chunks, _resolve_articles, app
+from src.api.dependencies import (
+    get_article_store,
+    get_bm25_index,
+    get_chat_model,
+    get_reranker,
+    get_store,
+)
 from src.ingestion.dataset import to_article
 from src.ingestion.pipeline import run_ingestion
 from src.retrieval.embeddings import FIXED_PREFIX_MODEL, MultilingualE5Embeddings
+from src.retrieval.keyword_index import KeywordIndex
+from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
 from tests.factories import raw_row
-from tests.fakes import FakeChatModel, FakeModel
+from tests.fakes import FakeChatModel, FakeCrossEncoder, FakeModel
+
+
+class _PassthroughCrossEncoder:
+    """Scores pairs by descending input order, so reranking is a no-op.
+
+    Used as the default Reranker in tests that predate reranking and assert
+    on fusion order directly — real reordering is covered separately by
+    `test_query_reranks_candidates_by_cross_encoder_score`.
+    """
+
+    def predict(self, pairs: list[tuple[str, str]]) -> list[float]:
+        return [-index for index in range(len(pairs))]
 
 
 @pytest.fixture(autouse=True)
@@ -40,10 +60,19 @@ def _populate(tmp_path: Path, model: FakeModel, rows: list[dict] | None = None):
     return chroma_store, article_store
 
 
-def _client_for(store, article_store: ArticleStore, chat_model: FakeChatModel) -> TestClient:
+def _client_for(
+    store,
+    article_store: ArticleStore,
+    chat_model: FakeChatModel,
+    reranker: Reranker | None = None,
+) -> TestClient:
     app.dependency_overrides[get_store] = lambda: store
     app.dependency_overrides[get_article_store] = lambda: article_store
     app.dependency_overrides[get_chat_model] = lambda: chat_model
+    app.dependency_overrides[get_bm25_index] = lambda: KeywordIndex(article_store)
+    app.dependency_overrides[get_reranker] = lambda: reranker or Reranker(
+        model=_PassthroughCrossEncoder()
+    )
     return TestClient(app)
 
 
@@ -108,6 +137,106 @@ def test_query_embeds_the_question_with_the_query_prefix(tmp_path: Path) -> None
 
     [prefixed_text] = model.encode_calls[-1]
     assert prefixed_text == "query: Quand une loi entre-t-elle en vigueur ?"
+
+
+def test_query_reranks_candidates_by_cross_encoder_score(tmp_path: Path) -> None:
+    question = "Quelle est la loi applicable ?"
+    rows = [
+        # Matches the question on both vector length and BM25 keywords, so
+        # raw fusion (no reranking) ranks it first.
+        raw_row(ref="A1", texte=question, etat="VIGUEUR"),
+        # Shares no keywords with the question and is far longer than it, so
+        # it ranks last on raw fusion — but FakeCrossEncoder scores by
+        # combined (question, texte) length, so it dominates the rerank.
+        raw_row(
+            ref="A2",
+            texte=(
+                "Une disposition sans rapport direct, dont le texte est "
+                "délibérément beaucoup plus étendu pour dominer le score "
+                "attribué par le faux évaluateur, fondé sur la longueur "
+                "combinée de la question posée et du texte évalué."
+            ),
+            etat="VIGUEUR",
+        ),
+    ]
+    model = FakeModel()
+    store, article_store = _populate(tmp_path, model, rows=rows)
+
+    # Confirm the premise: without reranking (the passthrough double), fusion
+    # alone ranks A1 first.
+    baseline_client = _client_for(store, article_store, FakeChatModel())
+    baseline = baseline_client.post("/query", json={"question": question, "top_k": 1})
+    assert baseline.json()["articles"][0]["ref"] == "A1"
+
+    reranked_client = _client_for(
+        store,
+        article_store,
+        FakeChatModel(),
+        reranker=Reranker(model=FakeCrossEncoder()),
+    )
+    response = reranked_client.post("/query", json={"question": question, "top_k": 1})
+
+    assert response.status_code == 200
+    assert response.json()["articles"][0]["ref"] == "A2"
+
+
+def test_query_surfaces_via_the_keyword_index_an_article_vector_search_alone_would_miss(
+    tmp_path: Path,
+) -> None:
+    model = FakeModel()
+    question = "Quelles sont les conditions de mise sous tutelle d'un majeur protégé ?"
+    # FakeModel embeds by prefixed-text length, so Chroma's L2 distance ranks
+    # Chunks by how close their length is to the question's. The distractors
+    # are sized close to the question; TUTELLE is deliberately much longer,
+    # so it ranks last (outside top_k) on vector similarity alone. Only
+    # TUTELLE's text contains "tutelle", so the Keyword Index side surfaces
+    # it via an exact statutory-term match.
+    rows = [
+        raw_row(
+            ref="D1",
+            texte="Le mariage est dissous par la mort de l'un des époux ou par le divorce légalement prononcé.",
+            etat="VIGUEUR",
+        ),
+        raw_row(
+            ref="D2",
+            texte="Le bail commercial est conclu pour une durée minimale de neuf années sauf convention contraire.",
+            etat="VIGUEUR",
+        ),
+        raw_row(
+            ref="D3",
+            texte="La prescription acquisitive permet l'acquisition de la propriété par la possession prolongée d'un bien.",
+            etat="VIGUEUR",
+        ),
+        raw_row(
+            ref="D4",
+            texte="Le contrat de vente transfère la propriété du vendeur à l'acheteur dès l'accord sur la chose et sur le prix.",
+            etat="VIGUEUR",
+        ),
+        raw_row(
+            ref="TUTELLE",
+            texte=(
+                "La tutelle est ouverte lorsque l'altération des facultés mentales ou "
+                "corporelles de la personne majeure empêche l'expression de sa volonté "
+                "et nécessite une représentation continue dans les actes de la vie "
+                "civile courante et administrative de cette personne protégée par la loi."
+            ),
+            etat="VIGUEUR",
+        ),
+    ]
+    store, article_store = _populate(tmp_path, model, rows=rows)
+    client = _client_for(store, article_store, FakeChatModel())
+
+    # Confirm the premise: TUTELLE ranks outside top_k on vector search alone.
+    vector_only_refs = [
+        chunk.metadata["ref"] for chunk in store.similarity_search(question, k=2)
+    ]
+    assert "TUTELLE" not in vector_only_refs
+
+    response = client.post("/query", json={"question": question, "top_k": 2})
+
+    assert response.status_code == 200
+    refs = [article["ref"] for article in response.json()["articles"]]
+    assert "TUTELLE" in refs
 
 
 def _populate_with_two_in_force_articles(tmp_path: Path, model: FakeModel):
@@ -201,27 +330,21 @@ def _seeded_article_store(tmp_path: Path, *rows: dict) -> ArticleStore:
     return store
 
 
-def test_unique_articles_deduplicates_chunks_from_the_same_article(tmp_path: Path) -> None:
-    article_store = _seeded_article_store(
-        tmp_path,
-        raw_row(ref="A1", texte="Texte un."),
-        raw_row(ref="A2", texte="Texte deux."),
-    )
+def test_ranked_refs_from_chunks_deduplicates_chunks_from_the_same_article() -> None:
     chunks = [
         Document(page_content="Texte un, partie 1.", metadata={"ref": "A1"}),
         Document(page_content="Texte deux.", metadata={"ref": "A2"}),
         Document(page_content="Texte un, partie 2.", metadata={"ref": "A1"}),
     ]
 
-    articles = _unique_articles(chunks, article_store)
+    refs = _ranked_refs_from_chunks(chunks)
 
-    assert [article["ref"] for article in articles] == ["A1", "A2"]
+    assert refs == ["A1", "A2"]
 
 
-def test_unique_articles_returns_the_articles_full_text_not_the_chunks(tmp_path: Path) -> None:
+def test_resolve_articles_returns_the_articles_full_text_not_the_chunks(tmp_path: Path) -> None:
     article_store = _seeded_article_store(tmp_path, raw_row(ref="A1", texte="Texte complet."))
-    chunks = [Document(page_content="Un fragment seulement.", metadata={"ref": "A1"})]
 
-    [article] = _unique_articles(chunks, article_store)
+    [article] = _resolve_articles(["A1"], article_store)
 
     assert article["texte"] == "Texte complet."

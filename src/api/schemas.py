@@ -4,14 +4,14 @@ from __future__ import annotations
 
 from pydantic import BaseModel, Field
 
-DEFAULT_TOP_K = 5
+from src import config
 
 
 class QueryRequest(BaseModel):
     """A natural-language question, with an optional retrieval size."""
 
     question: str
-    top_k: int = Field(default=DEFAULT_TOP_K, gt=0)
+    top_k: int = Field(default=config.DEFAULT_TOP_K, gt=0)
 
 
 class ArticleOut(BaseModel):

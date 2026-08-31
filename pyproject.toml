@@ -13,7 +13,9 @@ dependencies = [
     "langchain-openai>=1.6.0",
     "langchain-text-splitters>=1.1.2",
     "lingua-language-detector>=2.2.0",
+    "nltk>=3.10.3",
     "python-dotenv>=1.2.3",
+    "rank-bm25>=0.2.2",
     "sentence-transformers>=6.0.0",
     "torch>=2.6.0",
     "uvicorn>=0.52.4",
@@ -49,5 +51,5 @@ url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
 [[tool.mypy.overrides]]
-module = ["datasets"]
+module = ["datasets", "nltk", "nltk.*", "rank_bm25"]
 ignore_missing_imports = true
