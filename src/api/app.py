@@ -24,7 +24,14 @@ def _ranked_refs_from_chunks(chunks: list[Document]) -> list[str]:
     """Dedupe retrieved Chunks to their Article refs, in first-seen (highest-relevance) order.
 
     Several Chunks can match the same Article; each ref is kept once.
+
+    Args:
+        chunks (list[Document]): retrieved chunks
+
+    Returns:
+        list[str]: Article refs obtained from the retrieved chunks (no duplication)
     """
+    # Use a set for checks to reduce complexity (instead of using the list refs)
     seen_refs: set[str] = set()
     refs: list[str] = []
     for chunk in chunks:
@@ -37,7 +44,15 @@ def _ranked_refs_from_chunks(chunks: list[Document]) -> list[str]:
 
 
 def _resolve_articles(refs: list[str], article_store: ArticleStore) -> list[Article]:
-    """Resolve Article refs to their full records, preserving order."""
+    """Resolve Article refs to their full records, preserving order.
+
+    Args:
+        refs (list[str]): Article refs retrieved
+        article_store (ArticleStore): store containing all the articles
+
+    Returns:
+        list[Article]: Articles retrieved
+    """
     articles: list[Article] = []
     for ref in refs:
         article = article_store.get(ref)
@@ -50,6 +65,14 @@ def _resolve_articles(refs: list[str], article_store: ArticleStore) -> list[Arti
 
 
 def _to_article_out(article: Article) -> ArticleOut:
+    """Pydantic schema of the Article
+
+    Args:
+        article (Article): Article object
+
+    Returns:
+        ArticleOut: Article information stored in a usable pydantic schema
+    """
     return ArticleOut(ref=article["ref"], sectionParentTitre=article["sectionParentTitre"])
 
 
@@ -67,7 +90,18 @@ def query(
     article_store: ArticleStore = Depends(get_article_store),
     keyword_index: KeywordIndex = Depends(get_bm25_index),
 ) -> QueryResponse:
-    """Retrieve the most relevant Articles via Hybrid Retrieval and generate a grounded answer."""
+    """Retrieve the most relevant Articles via Hybrid Retrieval and generate a grounded answer.
+
+    Args:
+        request (QueryRequest): Query request received from the user
+        store (Chroma, optional): Chroma vectorstore. Defaults to Depends(get_store).
+        chat_model (Any, optional): LLM. Defaults to Depends(get_chat_model).
+        article_store (ArticleStore, optional): SQL article store. Defaults to Depends(get_article_store).
+        keyword_index (KeywordIndex, optional): BM25 keyword index. Defaults to Depends(get_bm25_index).
+
+    Returns:
+        QueryResponse: the generated answer and the Retrieved Articles it cites
+    """
     fetch_k = max(config.FETCH_K_MULTIPLIER * request.top_k, config.MIN_FETCH_K)
 
     chunks = store.similarity_search(request.question, k=fetch_k)

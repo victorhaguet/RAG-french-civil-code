@@ -17,6 +17,9 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
+# Number of Articles `/query` returns when the caller doesn't pass `top_k`.
+DEFAULT_TOP_K = int(os.getenv("DEFAULT_TOP_K", "5"))
+
 # Hybrid retrieval: each index fetches `max(FETCH_K_MULTIPLIER * top_k, MIN_FETCH_K)`
 # candidates before fusion, so the fused pool is meaningfully larger than top_k.
 FETCH_K_MULTIPLIER = 4
