@@ -15,6 +15,7 @@ dependencies = [
     "lingua-language-detector>=2.2.0",
     "python-dotenv>=1.2.3",
     "sentence-transformers>=6.0.0",
+    "torch>=2.6.0",
     "uvicorn>=0.52.4",
 ]
 
@@ -31,6 +32,21 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src"]
+
+# Pinned to the cu124 wheel index rather than PyPI's default torch build: PyPI
+# tracks the newest CUDA runtime (currently 13.0), which needs a newer NVIDIA
+# driver than most machines (including this project's dev machine, capped at
+# CUDA 12.4) actually have — `torch.cuda.is_available()` then silently returns
+# False and everything falls back to CPU. cu124 is the oldest CUDA build still
+# receiving torch releases, so any driver new enough to run it at all supports
+# it (drivers are backwards compatible with older CUDA versions).
+[tool.uv.sources]
+torch = [{ index = "pytorch-cu124" }]
+
+[[tool.uv.index]]
+name = "pytorch-cu124"
+url = "https://download.pytorch.org/whl/cu124"
+explicit = true
 
 [[tool.mypy.overrides]]
 module = ["datasets"]

@@ -39,11 +39,22 @@ of OpenAI itself, and change `OPENAI_MODEL` from the default (`gpt-4o-mini`).
 ## Embedding model
 
 Articles and questions are embedded with
-[`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small),
-picked so the app runs comfortably on CPU with no GPU required. It's one of the most
-efficient models in the E5 family for its size/quality tradeoff, ranking well on the
-[MTEB](https://huggingface.co/spaces/mteb/leaderboard) leaderboard both for French
-specifically and for multilingual retrieval in general.
+[`intfloat/multilingual-e5-large-instruct`](https://huggingface.co/intfloat/multilingual-e5-large-instruct)
+by default, one of the strongest models in the E5 family on the
+[MTEB](https://huggingface.co/spaces/mteb/leaderboard) leaderboard for French and multilingual
+retrieval. It's a ~560M-parameter model, so it wants a GPU to be fast — on an RTX 2050 (4GB
+VRAM) it embeds a query in well under 50ms and re-ingests this repo's whole corpus (~2,900
+articles) in under a minute. It still runs on CPU, just slowly.
+
+**No GPU?** Set `EMBEDDING_MODEL` in `.env` to
+[`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small)
+instead — a much smaller model in the same family that runs comfortably on CPU, at some cost
+to retrieval quality. Only these two models are supported out of the box; using a different
+embedding model family means editing `src/retrieval/embeddings.py`, since each family has its
+own prefixing convention.
+
+Switching `EMBEDDING_MODEL` requires re-running `scripts/ingest.py` — Chroma stores fixed-size
+vectors per collection, so a model change makes the existing vector store incompatible.
 
 ## Running it
 
