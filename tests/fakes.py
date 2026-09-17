@@ -43,6 +43,17 @@ class FakeCrossEncoder:
         )
 
 
+class PassthroughCrossEncoder:
+    """Scores pairs by descending input order, so reranking is a no-op.
+
+    Used as the default Reranker in tests that predate reranking and assert on
+    fusion order directly.
+    """
+
+    def predict(self, pairs: list[tuple[str, str]]) -> list[float]:
+        return [-index for index in range(len(pairs))]
+
+
 class FakeChatModel:
     """Records the prompts it was asked to answer; returns a canned reply."""
 

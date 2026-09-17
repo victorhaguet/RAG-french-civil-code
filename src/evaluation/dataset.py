@@ -8,11 +8,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TypedDict
+from typing import Any, TypedDict
 
 
 class GoldenQuestion(TypedDict):
-    """A hand-authored question with known-correct ground truth to score retrieval and generation against."""
+    """A hand-authored question with known-correct ground truth to score retrieval and generation against.
+
+    `reference_article_refs` is part of the Golden Question's ground truth (see
+    CONTEXT.md), but isn't fed into scoring: a question can plausibly be answered
+    from more than one Article, so a strict set-match against a fixed ref list would
+    understate recall. RAGAS's `context_recall` — judged against `reference_answer`,
+    not a ref list — is the more representative measure and is what's actually
+    scored. Kept in the schema as ground truth for future use (e.g. manual review).
+    """
 
     question: str
     reference_answer: str
@@ -34,7 +42,7 @@ def load_golden_questions(path: str | Path) -> list[GoldenQuestion]:
     Returns:
         list[GoldenQuestion]: one entry per non-blank line, `[]` for an empty file
     """
-    return [json.loads(line) for line in _read_nonblank_lines(path)]
+    return _load_jsonl(path)
 
 
 def load_guardrail_questions(path: str | Path) -> list[GuardrailQuestion]:
@@ -46,8 +54,9 @@ def load_guardrail_questions(path: str | Path) -> list[GuardrailQuestion]:
     Returns:
         list[GuardrailQuestion]: one entry per non-blank line, `[]` for an empty file
     """
-    return [json.loads(line) for line in _read_nonblank_lines(path)]
+    return _load_jsonl(path)
 
 
-def _read_nonblank_lines(path: str | Path) -> list[str]:
-    return [line for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
+def _load_jsonl(path: str | Path) -> list[Any]:
+    lines = Path(path).read_text(encoding="utf-8").splitlines()
+    return [json.loads(line) for line in lines if line.strip()]

@@ -21,12 +21,7 @@ from src.retrieval.keyword_index import KeywordIndex
 from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
 from tests.factories import raw_row
-from tests.fakes import FakeChatModel, FakeModel
-
-
-class _PassthroughCrossEncoder:
-    def predict(self, pairs: list[tuple[str, str]]) -> list[float]:
-        return [-index for index in range(len(pairs))]
+from tests.fakes import FakeChatModel, FakeModel, PassthroughCrossEncoder
 
 
 class _FakeScorableMetric:
@@ -39,12 +34,6 @@ class _FakeScorableMetric:
     def score(self, **kwargs: Any) -> Any:
         self.score_calls.append(kwargs)
         return SimpleNamespace(value=self.value)
-
-
-@pytest.fixture(autouse=True)
-def _clear_dependency_overrides():
-    yield
-    app.dependency_overrides.clear()
 
 
 def _client(tmp_path: Path, chat_model: FakeChatModel) -> TestClient:
@@ -61,7 +50,7 @@ def _client(tmp_path: Path, chat_model: FakeChatModel) -> TestClient:
     app.dependency_overrides[get_article_store] = lambda: article_store
     app.dependency_overrides[get_chat_model] = lambda: chat_model
     app.dependency_overrides[get_bm25_index] = lambda: KeywordIndex(article_store)
-    app.dependency_overrides[get_reranker] = lambda: Reranker(model=_PassthroughCrossEncoder())
+    app.dependency_overrides[get_reranker] = lambda: Reranker(model=PassthroughCrossEncoder())
     return TestClient(app)
 
 

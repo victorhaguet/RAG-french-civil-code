@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 
 from src.api.app import app
@@ -18,23 +17,12 @@ from src.retrieval.keyword_index import KeywordIndex
 from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
 from tests.factories import raw_row
-from tests.fakes import FakeChatModel, FakeModel
+from tests.fakes import FakeChatModel, FakeModel, PassthroughCrossEncoder
 
 _OUT_OF_SCOPE_ANSWER = (
     "Je ne peux pas répondre à cette question à partir des informations "
     "récupérées dans le Code civil."
 )
-
-
-class _PassthroughCrossEncoder:
-    def predict(self, pairs: list[tuple[str, str]]) -> list[float]:
-        return [-index for index in range(len(pairs))]
-
-
-@pytest.fixture(autouse=True)
-def _clear_dependency_overrides():
-    yield
-    app.dependency_overrides.clear()
 
 
 def _client(tmp_path: Path, chat_model: FakeChatModel) -> TestClient:
@@ -51,7 +39,7 @@ def _client(tmp_path: Path, chat_model: FakeChatModel) -> TestClient:
     app.dependency_overrides[get_article_store] = lambda: article_store
     app.dependency_overrides[get_chat_model] = lambda: chat_model
     app.dependency_overrides[get_bm25_index] = lambda: KeywordIndex(article_store)
-    app.dependency_overrides[get_reranker] = lambda: Reranker(model=_PassthroughCrossEncoder())
+    app.dependency_overrides[get_reranker] = lambda: Reranker(model=PassthroughCrossEncoder())
     return TestClient(app)
 
 
