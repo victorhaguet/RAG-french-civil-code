@@ -104,6 +104,32 @@ curl http://127.0.0.1:8000/articles/{ref}
 
 Interactive API docs (Swagger UI) are available at `http://127.0.0.1:8000/docs`.
 
+## Evaluation
+
+`scripts/evaluate.py` scores the real pipeline, driven exclusively through `/query`, against
+three hand-authored question sets in `eval/`: Golden Questions (RAGAS `faithfulness` and
+`context_recall`), Out-of-Scope Questions, and Injection Attempts (both scored as a binary
+guardrail-pass rate). See CONTEXT.md's Evaluation section for what each set is.
+
+Install the `eval` dependency group first — kept separate from `dev` since it pulls in RAGAS's
+heavy dependency chain (`langchain`, `langgraph`, ...), which the app itself never needs:
+
+```bash
+uv sync --group eval
+```
+
+Then run it, either in-process (real dependency wiring, no separate server needed) or against a
+running server:
+
+```bash
+uv run scripts/evaluate.py
+uv run scripts/evaluate.py --base-url http://127.0.0.1:8000
+```
+
+The `eval/*.jsonl` files ship empty — every metric reports "no data" until you populate them, one
+JSON object per line. Golden Questions need `question`, `reference_answer`, and
+`reference_article_refs`; Out-of-Scope Questions and Injection Attempts need only `question`.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

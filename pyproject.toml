@@ -28,6 +28,9 @@ dev = [
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
 ]
+eval = [
+    "ragas>=0.4.3",
+]
 
 [build-system]
 requires = ["hatchling"]

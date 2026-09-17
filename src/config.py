@@ -19,6 +19,11 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
+# scripts/evaluate.py's RAGAS judge model, configured independently of OPENAI_MODEL
+# so changing the model under test doesn't change how strictly it's judged.
+EVAL_JUDGE_BASE_URL = os.getenv("EVAL_JUDGE_BASE_URL")
+EVAL_JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "gpt-4o-mini")
+
 # Number of Articles `/query` returns when the caller doesn't pass `top_k`.
 DEFAULT_TOP_K = int(os.getenv("DEFAULT_TOP_K", "5"))
 
