@@ -14,6 +14,18 @@ name: RAGAS Evaluation Gate
 
 on:
   pull_request:
+    # Only when something that can change retrieval/generation behavior (or
+    # the eval harness/data/CI wiring itself) is touched -- a UI-only or
+    # docs-only PR shouldn't pay for a RAGAS run.
+    paths:
+      - "src/**"
+      - "scripts/ingest.py"
+      - "scripts/evaluate.py"
+      - "prompts/**"
+      - "eval/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/eval.yml"
 
 # Only one eval run per PR at a time -- a newer push (or the bot's own
 # baseline commit) supersedes any run already in flight.
