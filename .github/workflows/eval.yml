@@ -1,0 +1,100 @@
+# RAGAS score gate: runs the real pipeline against eval/*.jsonl on every pull
+# request, blocks merge on any regression against eval/baseline.json (or any
+# Injection Attempt failure), and -- once the gate passes -- updates the
+# committed baseline in this same run and pushes it back onto the PR branch,
+# so `main` inherits the correct baseline at merge time with no separate,
+# costlier re-run against `main`.
+#
+# Known limitation: pull requests from forks don't run this gate at all --
+# GitHub withholds repository secrets (OPENAI_API_KEY) from `pull_request`
+# workflow runs triggered by a fork, so the OpenAI client can't be built. Only
+# same-repo branch PRs are gated and get the baseline commit-back; no
+# external contributors are expected currently.
+name: RAGAS Evaluation Gate
+
+on:
+  pull_request:
+
+# Only one eval run per PR at a time -- a newer push (or the bot's own
+# baseline commit) supersedes any run already in flight.
+concurrency:
+  group: eval-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  eval:
+    # Re-trigger guard required by this workflow's spec: GITHUB_TOKEN-authored
+    # pushes don't trigger new `pull_request` runs by default, so the
+    # baseline commit-back below shouldn't loop as things stand -- but skip
+    # runs whose push actor is the bot regardless, as a defensive guard that
+    # keeps holding if the push credential ever changes (e.g. to a PAT).
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # Pinned independently of whatever EMBEDDING_MODEL a contributor has
+      # locally, so eval results are CPU-friendly and consistent across runs.
+      EMBEDDING_MODEL: intfloat/multilingual-e5-small
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        run: uv sync --locked --group eval
+
+      - name: Build the vector store and article database
+        run: uv run scripts/ingest.py
+
+      - name: Resolve optional judge configuration
+        # Repo variables, not secrets -- config, not credentials. Written to
+        # GITHUB_ENV only when actually configured, so an unset repo variable
+        # leaves the corresponding env var genuinely absent downstream
+        # (falling back to scripts/evaluate.py's own defaults) rather than
+        # present-but-empty, which would point the OpenAI client at an empty
+        # base URL instead of its default.
+        run: |
+          if [ -n "${{ vars.EVAL_JUDGE_MODEL }}" ]; then
+            echo "EVAL_JUDGE_MODEL=${{ vars.EVAL_JUDGE_MODEL }}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${{ vars.EVAL_JUDGE_BASE_URL }}" ]; then
+            echo "EVAL_JUDGE_BASE_URL=${{ vars.EVAL_JUDGE_BASE_URL }}" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run the RAGAS score gate
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: uv run scripts/evaluate.py --mode gate
+
+      - name: Update the committed baseline
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: uv run scripts/evaluate.py --mode update-baseline
+
+      - name: Commit and push the updated baseline
+        # GITHUB_TOKEN can only push to branches within this repo -- see the
+        # "Known limitation" note at the top of this file.
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        run: |
+          if git diff --quiet -- eval/baseline.json; then
+            echo "Baseline unchanged; nothing to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add eval/baseline.json
+          git commit -m "chore: update eval baseline"
+          git push origin HEAD:${{ github.event.pull_request.head.ref }}
