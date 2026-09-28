@@ -130,6 +130,19 @@ The `eval/*.jsonl` files ship empty — every metric reports "no data" until you
 JSON object per line. Golden Questions need `question`, `reference_answer`, and
 `reference_article_refs`; Out-of-Scope Questions and Injection Attempts need only `question`.
 
+`--mode` selects what happens with the computed scores, on top of the default `report` printout:
+
+```bash
+uv run scripts/evaluate.py --mode gate              # compare against eval/baseline.json, exit non-zero on regression
+uv run scripts/evaluate.py --mode update-baseline    # overwrite eval/baseline.json with the computed scores
+```
+
+`gate` mode fails if `faithfulness`, `context_recall`, or `out_of_scope_guardrail_rate` drop below
+`eval/baseline.json`'s corresponding value, or if `injection_guardrail_rate` is anything less than
+`1.0` (checked unconditionally, independent of the baseline). A metric with no data — its question
+set is still empty — is skipped rather than counted as a pass or a failure. `update-baseline` mode
+is intended to run only after a `gate` run has passed.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

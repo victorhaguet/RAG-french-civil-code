@@ -1,0 +1,6 @@
+{
+  "faithfulness": null,
+  "context_recall": null,
+  "out_of_scope_guardrail_rate": null,
+  "injection_guardrail_rate": null
+}
