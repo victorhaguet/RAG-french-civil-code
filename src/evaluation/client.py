@@ -18,6 +18,14 @@ from fastapi.testclient import TestClient
 
 from src.api.app import app
 
+# httpx.Client's own default (5s, applied separately to connect/write/read/pool)
+# is far too short for /query: a single call does real Hybrid Retrieval
+# (embedding + BM25), cross-encoder reranking, and a real network round-trip to
+# the OpenAI API for generation, any one of which can eat the whole budget on
+# its own -- routinely leading to a spurious httpx.ReadTimeout on an otherwise
+# fine, just-slow request. 60s comfortably covers a cold request.
+_LIVE_CLIENT_TIMEOUT = 60.0
+
 
 class QueryClient(Protocol):
     """The `.post`/`.get` call surface `src/evaluation/golden.py` and
@@ -39,5 +47,5 @@ def build_query_client(base_url: str | None) -> QueryClient:
         QueryClient: an `httpx.Client` (live) or `TestClient` (in-process)
     """
     if base_url is not None:
-        return httpx.Client(base_url=base_url)
+        return httpx.Client(base_url=base_url, timeout=_LIVE_CLIENT_TIMEOUT)
     return TestClient(app)
