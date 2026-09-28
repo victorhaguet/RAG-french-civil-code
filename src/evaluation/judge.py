@@ -14,6 +14,16 @@ from typing import Any
 from src import config
 from src.evaluation.metrics import ScorableMetric
 
+# ragas's own InstructorModelArgs default (1024) caps how many tokens the judge
+# may *generate* for its structured verdict, independent of the judge model's
+# actual context window. Faithfulness's NLI verdict step returns one verdict +
+# reasoning per statement extracted from the answer as a single JSON blob, and
+# a real, multi-statement grounded answer -- especially judged by a verbose
+# open-weight model -- can exceed 1024 tokens, truncating the JSON mid-output
+# and failing with instructor.IncompleteOutputException. ragas's own docs
+# recommend 4096+ for exactly this failure mode.
+_JUDGE_MAX_TOKENS = 4096
+
 
 def build_judge_metrics() -> tuple[ScorableMetric, ScorableMetric]:
     """Build RAGAS's `Faithfulness` and `ContextRecall` metrics, bound to the judge LLM.
@@ -48,7 +58,7 @@ def build_judge_metrics() -> tuple[ScorableMetric, ScorableMetric]:
     # `.agenerate()` -- that raises TypeError unless the wrapped client is
     # async (llm_factory's own docs build it from AsyncOpenAI for this reason).
     client = AsyncOpenAI(base_url=config.EVAL_JUDGE_BASE_URL, api_key=config.OPENAI_API_KEY)
-    llm = llm_factory(config.EVAL_JUDGE_MODEL, client=client)
+    llm = llm_factory(config.EVAL_JUDGE_MODEL, client=client, max_tokens=_JUDGE_MAX_TOKENS)
     return Faithfulness(llm=llm), ContextRecall(llm=llm)
 
 
