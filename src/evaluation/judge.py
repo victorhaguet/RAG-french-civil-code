@@ -38,11 +38,16 @@ def build_judge_metrics() -> tuple[ScorableMetric, ScorableMetric]:
     """
     _stub_langchain_community_vertexai()
 
-    from openai import OpenAI
+    from openai import AsyncOpenAI
     from ragas.llms import llm_factory
     from ragas.metrics.collections import ContextRecall, Faithfulness
 
-    client = OpenAI(base_url=config.EVAL_JUDGE_BASE_URL, api_key=config.OPENAI_API_KEY)
+    # AsyncOpenAI, not OpenAI: ragas's collections metrics (Faithfulness,
+    # ContextRecall) expose a sync `.score()` that internally does
+    # `asyncio.run(self.ascore(...))`, which always calls the LLM wrapper's
+    # `.agenerate()` -- that raises TypeError unless the wrapped client is
+    # async (llm_factory's own docs build it from AsyncOpenAI for this reason).
+    client = AsyncOpenAI(base_url=config.EVAL_JUDGE_BASE_URL, api_key=config.OPENAI_API_KEY)
     llm = llm_factory(config.EVAL_JUDGE_MODEL, client=client)
     return Faithfulness(llm=llm), ContextRecall(llm=llm)
 
