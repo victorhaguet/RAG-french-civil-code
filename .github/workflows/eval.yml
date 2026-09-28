@@ -16,21 +16,28 @@ on:
   pull_request:
     # Only when something that can change retrieval/generation behavior (or
     # the eval harness/data/CI wiring itself) is touched -- a UI-only or
-    # docs-only PR shouldn't pay for a RAGAS run.
+    # docs-only PR shouldn't pay for a RAGAS run. Deliberately excludes
+    # pyproject.toml/uv.lock: paths matching is glob-based, so it can't tell
+    # a pipeline-relevant dependency bump (e.g. langchain-openai, torch)
+    # apart from an unrelated addition (e.g. a UI framework) in the same
+    # file -- trigger those manually instead, via workflow_dispatch below.
     paths:
       - "src/**"
       - "scripts/ingest.py"
       - "scripts/evaluate.py"
       - "prompts/**"
       - "eval/**"
-      - "pyproject.toml"
-      - "uv.lock"
       - ".github/workflows/eval.yml"
+  # Manual escape hatch for changes the paths filter above can't see the
+  # relevance of, e.g. a pipeline-relevant dependency bump in pyproject.toml.
+  # Run from the branch/PR you want gated (`gh workflow run eval.yml --ref
+  # <branch>`); on a PR branch it still commits the baseline back to it.
+  workflow_dispatch:
 
-# Only one eval run per PR at a time -- a newer push (or the bot's own
-# baseline commit) supersedes any run already in flight.
+# Only one eval run per PR (or manually-dispatched branch) at a time -- a
+# newer push (or the bot's own baseline commit) supersedes any run in flight.
 concurrency:
-  group: eval-${{ github.event.pull_request.number }}
+  group: eval-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: true
 
 permissions:
@@ -54,8 +61,10 @@ jobs:
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.ref }}
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          # Falls back to the dispatched branch when run via workflow_dispatch
+          # (no github.event.pull_request context in that case).
+          ref: ${{ github.event.pull_request.head.ref || github.ref_name }}
+          repository: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
@@ -98,8 +107,10 @@ jobs:
 
       - name: Commit and push the updated baseline
         # GITHUB_TOKEN can only push to branches within this repo -- see the
-        # "Known limitation" note at the top of this file.
-        if: github.event.pull_request.head.repo.full_name == github.repository
+        # "Known limitation" note at the top of this file. A workflow_dispatch
+        # run is always same-repo (only triggerable by someone with write
+        # access), so it always qualifies.
+        if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
         run: |
           if git diff --quiet -- eval/baseline.json; then
             echo "Baseline unchanged; nothing to commit."
@@ -109,4 +120,4 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add eval/baseline.json
           git commit -m "chore: update eval baseline"
-          git push origin HEAD:${{ github.event.pull_request.head.ref }}
+          git push origin HEAD:${{ github.event.pull_request.head.ref || github.ref_name }}
