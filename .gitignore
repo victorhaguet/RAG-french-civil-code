@@ -13,3 +13,7 @@ __pycache__/
 # Local persistent vectorstore and Article store
 data/chroma/
 data/articles.db
+
+# scripts/evaluate.py's per-run Markdown report -- eval/baseline.json is the
+# committed artifact; this is regenerated every run and never checked in.
+eval/results.md

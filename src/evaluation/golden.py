@@ -12,9 +12,19 @@ from src.evaluation.metrics import ScorableMetric
 
 @dataclass
 class GoldenQuestionScore:
-    """One Golden Question's scores."""
+    """One Golden Question's scores, plus enough of the run to review by hand.
+
+    `answer` and `articles` are the real pipeline's output for this question;
+    `reference_answer` and `reference_article_refs` are its ground truth
+    (see `GoldenQuestion`) -- carried alongside for `src.evaluation.report`
+    to show expected vs. actual, not used in scoring itself.
+    """
 
     question: str
+    answer: str
+    articles: list[str]
+    reference_answer: str
+    reference_article_refs: list[str]
     faithfulness: float
     context_recall: float
 
@@ -99,6 +109,10 @@ def _score_golden_question(
 
     return GoldenQuestionScore(
         question=golden["question"],
+        answer=body["answer"],
+        articles=[article["ref"] for article in body["articles"]],
+        reference_answer=golden["reference_answer"],
+        reference_article_refs=golden["reference_article_refs"],
         faithfulness=faithfulness_score,
         context_recall=context_recall_score,
     )

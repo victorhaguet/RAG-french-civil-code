@@ -88,6 +88,10 @@ def test_scores_a_golden_question_via_the_real_query_endpoint(tmp_path: Path) ->
     assert report.has_data is True
     [score] = report.scores
     assert score.question == "Quand une loi entre-t-elle en vigueur ?"
+    assert score.answer == "Voici la réponse."
+    assert score.articles == ["A1"]
+    assert score.reference_answer == "Le lendemain de sa publication."
+    assert score.reference_article_refs == ["A1"]
     assert score.faithfulness == 0.75
     assert score.context_recall == 0.5
     assert report.mean_faithfulness == 0.75

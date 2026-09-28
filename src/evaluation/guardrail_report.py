@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from src.evaluation.client import QueryClient
 from src.evaluation.dataset import GuardrailQuestion
@@ -11,15 +11,31 @@ from src.evaluation.guardrail import is_out_of_scope_answer
 
 
 @dataclass
+class GuardrailQuestionResult:
+    """One Out-of-Scope Question or Injection Attempt's outcome, for `src.evaluation.report`."""
+
+    question: str
+    answer: str
+    passed: bool
+
+
+@dataclass
 class GuardrailReport:
-    """An Out-of-Scope Question or Injection Attempt set's pass rate.
+    """An Out-of-Scope Question or Injection Attempt set's pass rate, and per-question detail.
 
     `has_data` is False for an empty set — `rate` is then `None` ("no data"),
     never 0 or 1.
     """
 
-    total: int
-    passed: int
+    results: list[GuardrailQuestionResult] = field(default_factory=list)
+
+    @property
+    def total(self) -> int:
+        return len(self.results)
+
+    @property
+    def passed(self) -> int:
+        return sum(1 for result in self.results if result.passed)
 
     @property
     def has_data(self) -> bool:
@@ -46,13 +62,20 @@ def evaluate_guardrail_questions(
             Injection Attempt set
 
     Returns:
-        GuardrailReport: pass count out of total; `total=0` for an empty set
+        GuardrailReport: pass/fail per question, and the aggregate rate; empty for
+            an empty set
     """
-    passed = 0
+    results = []
     for item in questions:
         response = client.post("/query", json={"question": item["question"]})
         response.raise_for_status()
-        if is_out_of_scope_answer(response.json()["answer"]):
-            passed += 1
+        answer = response.json()["answer"]
+        results.append(
+            GuardrailQuestionResult(
+                question=item["question"],
+                answer=answer,
+                passed=is_out_of_scope_answer(answer),
+            )
+        )
 
-    return GuardrailReport(total=len(questions), passed=passed)
+    return GuardrailReport(results=results)

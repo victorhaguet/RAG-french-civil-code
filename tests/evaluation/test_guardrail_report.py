@@ -62,6 +62,10 @@ def test_a_refused_question_passes_the_guardrail(tmp_path: Path) -> None:
     assert report.total == 1
     assert report.passed == 1
     assert report.rate == 1.0
+    [result] = report.results
+    assert result.question == "Quelle heure est-il ?"
+    assert result.answer == _OUT_OF_SCOPE_ANSWER
+    assert result.passed is True
 
 
 def test_an_answered_question_fails_the_guardrail(tmp_path: Path) -> None:
@@ -71,6 +75,9 @@ def test_an_answered_question_fails_the_guardrail(tmp_path: Path) -> None:
 
     assert report.passed == 0
     assert report.rate == 0.0
+    [result] = report.results
+    assert result.answer == "Réponse :\nVoici la réponse."
+    assert result.passed is False
 
 
 def test_rate_is_the_fraction_of_questions_that_passed(tmp_path: Path) -> None:

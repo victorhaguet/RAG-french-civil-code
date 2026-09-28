@@ -130,6 +130,10 @@ The `eval/*.jsonl` files ship empty — every metric reports "no data" until you
 JSON object per line. Golden Questions need `question`, `reference_answer`, and
 `reference_article_refs`; Out-of-Scope Questions and Injection Attempts need only `question`.
 
+Every run also writes `eval/results.md`, a Markdown report with one section per question — its
+generated answer, retrieved articles, and score or pass/fail — not just the printed aggregates.
+It's regenerated on every run and never committed.
+
 `--mode` selects what happens with the computed scores, on top of the default `report` printout:
 
 ```bash

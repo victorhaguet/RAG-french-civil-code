@@ -2,8 +2,9 @@
 
 Prints RAGAS `faithfulness` and `context_recall` for the Golden Question set, and
 binary guardrail-pass rates for the Out-of-Scope Question and Injection Attempt
-sets. Safe to run before those files are populated: every metric then reports
-"no data".
+sets. Also writes a full Markdown report -- every question's own answer, retrieved
+articles, and score/pass-fail, not just the aggregates -- to `eval/results.md`.
+Safe to run before those files are populated: every metric then reports "no data".
 
 Three modes (`--mode`):
     report (default)  Print the scores and exit 0.
@@ -25,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 from src.evaluation.client import build_query_client
@@ -33,11 +35,13 @@ from src.evaluation.gate import Scores, evaluate_gate
 from src.evaluation.golden import GoldenReport, evaluate_golden_questions
 from src.evaluation.guardrail_report import GuardrailReport, evaluate_guardrail_questions
 from src.evaluation.judge import build_judge_metrics
+from src.evaluation.report import render_markdown_report
 
 GOLDEN_QUESTIONS_PATH = "eval/golden_questions.jsonl"
 OUT_OF_SCOPE_QUESTIONS_PATH = "eval/out_of_scope_questions.jsonl"
 INJECTION_ATTEMPTS_PATH = "eval/injection_attempts.jsonl"
 BASELINE_PATH = "eval/baseline.json"
+RESULTS_REPORT_PATH = "eval/results.md"
 
 
 def main() -> None:
@@ -75,6 +79,8 @@ def main() -> None:
     _print_guardrail_report("out_of_scope_guardrail_rate", out_of_scope_report)
     _print_guardrail_report("injection_guardrail_rate", injection_report)
 
+    _write_results_report(golden_report, out_of_scope_report, injection_report)
+
     scores = _build_scores(golden_report, out_of_scope_report, injection_report)
 
     if args.mode == "gate":
@@ -104,6 +110,19 @@ def _print_guardrail_report(name: str, report: GuardrailReport) -> None:
         print(f"{name}: no data")
         return
     print(f"{name}: {report.rate:.2f} ({report.passed}/{report.total})")
+
+
+def _write_results_report(
+    golden_report: GoldenReport,
+    out_of_scope_report: GuardrailReport,
+    injection_report: GuardrailReport,
+) -> None:
+    markdown = render_markdown_report(
+        golden_report, out_of_scope_report, injection_report, generated_at=datetime.now()
+    )
+    Path(RESULTS_REPORT_PATH).write_text(markdown, encoding="utf-8")
+    print()
+    print(f"Wrote {RESULTS_REPORT_PATH}")
 
 
 def _build_scores(
