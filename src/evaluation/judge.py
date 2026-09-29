@@ -24,6 +24,11 @@ from src.evaluation.metrics import ScorableMetric
 # recommend 4096+ for exactly this failure mode.
 _JUDGE_MAX_TOKENS = 4096
 
+# The judge scores faithfulness/context_recall, not generates prose -- 0 keeps
+# its verdicts reproducible run-to-run (comparable against eval/baseline.json)
+# rather than resampled each time.
+_JUDGE_TEMPERATURE = 0.0
+
 
 def build_judge_metrics() -> tuple[ScorableMetric, ScorableMetric]:
     """Build RAGAS's `Faithfulness` and `ContextRecall` metrics, bound to the judge LLM.
@@ -58,7 +63,12 @@ def build_judge_metrics() -> tuple[ScorableMetric, ScorableMetric]:
     # `.agenerate()` -- that raises TypeError unless the wrapped client is
     # async (llm_factory's own docs build it from AsyncOpenAI for this reason).
     client = AsyncOpenAI(base_url=config.EVAL_JUDGE_BASE_URL, api_key=config.OPENAI_API_KEY)
-    llm = llm_factory(config.EVAL_JUDGE_MODEL, client=client, max_tokens=_JUDGE_MAX_TOKENS)
+    llm = llm_factory(
+        config.EVAL_JUDGE_MODEL,
+        client=client,
+        max_tokens=_JUDGE_MAX_TOKENS,
+        temperature=_JUDGE_TEMPERATURE,
+    )
     return Faithfulness(llm=llm), ContextRecall(llm=llm)
 
 
