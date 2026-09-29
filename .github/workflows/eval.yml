@@ -52,6 +52,10 @@ jobs:
     # keeps holding if the push credential ever changes (e.g. to a PAT).
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
+    # Secrets/variables live in this GitHub Environment (Settings >
+    # Environments), not at the repo level -- a job only sees an
+    # environment's secrets/vars once it opts in like this.
+    environment: ragas_evaluation
     timeout-minutes: 30
     env:
       # Pinned independently of whatever EMBEDDING_MODEL a contributor has
