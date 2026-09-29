@@ -80,14 +80,30 @@ jobs:
       - name: Build the vector store and article database
         run: uv run scripts/ingest.py
 
-      - name: Resolve optional judge configuration
-        # Repo variables, not secrets -- config, not credentials. Written to
+      - name: Resolve optional provider configuration
+        # Repo variables, not secrets -- config, not credentials (the actual
+        # key stays in the OPENAI_API_KEY secret below). Written to
         # GITHUB_ENV only when actually configured, so an unset repo variable
         # leaves the corresponding env var genuinely absent downstream
-        # (falling back to scripts/evaluate.py's own defaults) rather than
-        # present-but-empty, which would point the OpenAI client at an empty
-        # base URL instead of its default.
+        # (falling back to scripts/evaluate.py's own defaults, i.e. real
+        # OpenAI) rather than present-but-empty, which would point the
+        # OpenAI client at an empty base URL instead of its default.
+        #
+        # OPENAI_BASE_URL/OPENAI_MODEL point generation at a non-OpenAI
+        # OpenAI-compatible endpoint (e.g. Scaleway); EVAL_JUDGE_BASE_URL/
+        # EVAL_JUDGE_MODEL do the same for the judge, independently -- both
+        # authenticate with the single OPENAI_API_KEY secret, so it must be
+        # valid for whichever endpoint(s) these point at.
         run: |
+          if [ -n "${{ vars.OPENAI_BASE_URL }}" ]; then
+            echo "OPENAI_BASE_URL=${{ vars.OPENAI_BASE_URL }}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${{ vars.OPENAI_MODEL }}" ]; then
+            echo "OPENAI_MODEL=${{ vars.OPENAI_MODEL }}" >> "$GITHUB_ENV"
+          fi
+          if [ -n "${{ vars.OPENAI_TEMPERATURE }}" ]; then
+            echo "OPENAI_TEMPERATURE=${{ vars.OPENAI_TEMPERATURE }}" >> "$GITHUB_ENV"
+          fi
           if [ -n "${{ vars.EVAL_JUDGE_MODEL }}" ]; then
             echo "EVAL_JUDGE_MODEL=${{ vars.EVAL_JUDGE_MODEL }}" >> "$GITHUB_ENV"
           fi
