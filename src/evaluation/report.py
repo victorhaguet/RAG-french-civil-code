@@ -84,8 +84,8 @@ def _render_golden_questions(report: GoldenReport) -> str:
                 [
                     f"### {i}. {score.question}",
                     "",
-                    f"- **Faithfulness**: {score.faithfulness:.2f}",
-                    f"- **Context Recall**: {score.context_recall:.2f}",
+                    f"- **Faithfulness**: {_format_score(score.faithfulness)}",
+                    f"- **Context Recall**: {_format_score(score.context_recall)}",
                     f"- **Answer**: {score.answer}",
                     f"- **Retrieved articles**: {_format_refs(score.articles)}",
                     f"- **Reference answer**: {score.reference_answer}",

@@ -48,6 +48,30 @@ def test_renders_one_section_per_golden_question_with_its_own_answer_and_article
     assert "| Faithfulness (mean) | 0.90 |" in report
 
 
+def test_renders_a_judge_error_as_no_data_not_a_crash() -> None:
+    golden_report = GoldenReport(
+        scores=[
+            GoldenQuestionScore(
+                question="Quand une loi entre-t-elle en vigueur ?",
+                answer="Le lendemain de sa publication.",
+                articles=["LEGIARTI000006419280"],
+                reference_answer="Le lendemain de sa publication au Journal officiel.",
+                reference_article_refs=["LEGIARTI000006419280"],
+                faithfulness=None,
+                context_recall=1.0,
+            )
+        ]
+    )
+
+    report = render_markdown_report(
+        golden_report, GuardrailReport(), GuardrailReport(), generated_at=_GENERATED_AT
+    )
+
+    assert "- **Faithfulness**: no data" in report
+    assert "- **Context Recall**: 1.00" in report
+    assert "| Faithfulness (mean) | no data |" in report
+
+
 def test_renders_pass_and_fail_guardrail_questions_with_their_answers() -> None:
     out_of_scope_report = GuardrailReport(
         results=[

@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
+from typing import Any
 
 from src.evaluation.client import QueryClient
 from src.evaluation.dataset import GoldenQuestion
@@ -18,6 +20,12 @@ class GoldenQuestionScore:
     `reference_answer` and `reference_article_refs` are its ground truth
     (see `GoldenQuestion`) -- carried alongside for `src.evaluation.report`
     to show expected vs. actual, not used in scoring itself.
+
+    `faithfulness`/`context_recall` are `None` when the judge LLM itself failed
+    to score this question (see `_safe_judge_score`) -- the `/query` call that
+    produced `answer`/`articles` above already succeeded; only that one judge
+    verdict is missing. `GoldenReport`'s means exclude a `None`, never count it
+    as 0.
     """
 
     question: str
@@ -25,8 +33,8 @@ class GoldenQuestionScore:
     articles: list[str]
     reference_answer: str
     reference_article_refs: list[str]
-    faithfulness: float
-    context_recall: float
+    faithfulness: float | None
+    context_recall: float | None
 
 
 @dataclass
@@ -34,7 +42,9 @@ class GoldenReport:
     """The Golden Question set's scores, per-question and aggregate.
 
     `has_data` is False for an empty Golden Question set — `mean_faithfulness`
-    and `mean_context_recall` are then `None` ("no data"), never 0.
+    and `mean_context_recall` are then `None` ("no data"), never 0. They're
+    also `None` (not 0) if every question's judge call for that metric failed
+    -- `faithfulness_scored`/`context_recall_scored` say how many actually did.
     """
 
     scores: list[GoldenQuestionScore] = field(default_factory=list)
@@ -45,11 +55,19 @@ class GoldenReport:
 
     @property
     def mean_faithfulness(self) -> float | None:
-        return _mean(score.faithfulness for score in self.scores) if self.has_data else None
+        return _mean(score.faithfulness for score in self.scores if score.faithfulness is not None)
 
     @property
     def mean_context_recall(self) -> float | None:
-        return _mean(score.context_recall for score in self.scores) if self.has_data else None
+        return _mean(score.context_recall for score in self.scores if score.context_recall is not None)
+
+    @property
+    def faithfulness_scored(self) -> int:
+        return sum(1 for score in self.scores if score.faithfulness is not None)
+
+    @property
+    def context_recall_scored(self) -> int:
+        return sum(1 for score in self.scores if score.context_recall is not None)
 
 
 def evaluate_golden_questions(
@@ -96,16 +114,22 @@ def _score_golden_question(
 
     contexts = [_fetch_article_text(client, article["ref"]) for article in body["articles"]]
 
-    faithfulness_score = faithfulness_metric.score(
+    faithfulness_score = _safe_judge_score(
+        golden["question"],
+        "faithfulness",
+        faithfulness_metric,
         user_input=golden["question"],
         response=body["answer"],
         retrieved_contexts=contexts,
-    ).value
-    context_recall_score = context_recall_metric.score(
+    )
+    context_recall_score = _safe_judge_score(
+        golden["question"],
+        "context_recall",
+        context_recall_metric,
         user_input=golden["question"],
         retrieved_contexts=contexts,
         reference=golden["reference_answer"],
-    ).value
+    )
 
     return GoldenQuestionScore(
         question=golden["question"],
@@ -118,6 +142,23 @@ def _score_golden_question(
     )
 
 
+def _safe_judge_score(question: str, metric_name: str, metric: ScorableMetric, **kwargs: Any) -> float | None:
+    """Score one sample, tolerating the judge LLM itself failing.
+
+    The judge is an external LLM call and can fail on its own -- rate limits, or
+    a verbose/long answer whose structured-output verdict gets truncated
+    mid-JSON (see `src.evaluation.judge`'s `_JUDGE_MAX_TOKENS`) -- independently
+    of whether this pipeline's own `/query` call (already succeeded by the time
+    this runs) has a bug. Returns `None` rather than raising, so one bad judge
+    call doesn't abort the whole Golden Question run.
+    """
+    try:
+        return metric.score(**kwargs).value
+    except Exception as exc:
+        print(f"  ! {metric_name} judge error on {question!r}: {exc}", file=sys.stderr)
+        return None
+
+
 def _fetch_article_text(client: QueryClient, ref: str) -> str:
     response = client.get(f"/articles/{ref}")
     response.raise_for_status()
@@ -125,6 +166,6 @@ def _fetch_article_text(client: QueryClient, ref: str) -> str:
     return text
 
 
-def _mean(values: Iterable[float]) -> float:
+def _mean(values: Iterable[float]) -> float | None:
     values = list(values)
-    return sum(values) / len(values)
+    return sum(values) / len(values) if values else None

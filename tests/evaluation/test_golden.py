@@ -111,6 +111,66 @@ def test_scores_a_golden_question_via_the_real_query_endpoint(tmp_path: Path) ->
     ]
 
 
+def test_a_judge_error_on_one_metric_is_reported_as_none_not_raised(tmp_path: Path) -> None:
+    client = _client(tmp_path, FakeChatModel(answer="Voici la réponse."))
+    faithfulness = _FakeScorableMetric(0.0)
+
+    def _raise(**kwargs: Any) -> Any:
+        raise RuntimeError("simulated judge truncation")
+
+    faithfulness.score = _raise  # type: ignore[method-assign]
+    context_recall = _FakeScorableMetric(0.5)
+
+    report = evaluate_golden_questions(
+        client,
+        [
+            {
+                "question": "Quand une loi entre-t-elle en vigueur ?",
+                "reference_answer": "Le lendemain de sa publication.",
+                "reference_article_refs": ["A1"],
+            }
+        ],
+        lambda: (faithfulness, context_recall),
+    )
+
+    [score] = report.scores
+    assert score.faithfulness is None
+    assert score.context_recall == 0.5
+    # The /query call itself still succeeded -- only the judge verdict is missing.
+    assert score.answer == "Voici la réponse."
+    assert report.mean_faithfulness is None
+    assert report.mean_context_recall == 0.5
+    assert report.faithfulness_scored == 0
+    assert report.context_recall_scored == 1
+
+
+def test_mean_excludes_judge_errors_rather_than_counting_them_as_zero(tmp_path: Path) -> None:
+    client = _client(tmp_path, FakeChatModel())
+    results: list[float | None] = [0.8, None]
+
+    def _score(**kwargs: Any) -> Any:
+        value = results.pop(0)
+        if value is None:
+            raise RuntimeError("simulated judge truncation")
+        return SimpleNamespace(value=value)
+
+    faithfulness = _FakeScorableMetric(0.0)
+    faithfulness.score = _score  # type: ignore[method-assign]
+    context_recall = _FakeScorableMetric(1.0)
+
+    golden_questions: list[GoldenQuestion] = [
+        {"question": "Q1", "reference_answer": "R1", "reference_article_refs": ["A1"]},
+        {"question": "Q2", "reference_answer": "R2", "reference_article_refs": ["A1"]},
+    ]
+
+    report = evaluate_golden_questions(
+        client, golden_questions, lambda: (faithfulness, context_recall)
+    )
+
+    assert report.mean_faithfulness == 0.8  # not (0.8 + 0) / 2
+    assert report.faithfulness_scored == 1
+
+
 def test_mean_averages_scores_across_multiple_golden_questions(tmp_path: Path) -> None:
     client = _client(tmp_path, FakeChatModel())
     scores = iter([0.2, 0.6])

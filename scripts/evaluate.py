@@ -96,13 +96,27 @@ def _print_golden_report(report: GoldenReport) -> None:
         print("  context_recall: no data")
         return
 
+    total = len(report.scores)
     for score in report.scores:
         print(
             f"  - {score.question!r}: "
-            f"faithfulness={score.faithfulness:.2f} context_recall={score.context_recall:.2f}"
+            f"faithfulness={_format_score(score.faithfulness)} "
+            f"context_recall={_format_score(score.context_recall)}"
         )
-    print(f"  faithfulness (mean): {report.mean_faithfulness:.2f}")
-    print(f"  context_recall (mean): {report.mean_context_recall:.2f}")
+    print(
+        f"  faithfulness (mean): {_format_score(report.mean_faithfulness)} "
+        f"({report.faithfulness_scored}/{total} scored)"
+    )
+    print(
+        f"  context_recall (mean): {_format_score(report.mean_context_recall)} "
+        f"({report.context_recall_scored}/{total} scored)"
+    )
+
+
+def _format_score(value: float | None) -> str:
+    """`value` is `None` when the judge failed to score that question/metric (see
+    `src.evaluation.golden._safe_judge_score`) -- printed as "ERROR", not 0.00."""
+    return f"{value:.2f}" if value is not None else "ERROR"
 
 
 def _print_guardrail_report(name: str, report: GuardrailReport) -> None:
