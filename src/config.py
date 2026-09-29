@@ -19,6 +19,14 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
+# Low by default: this generates legal answers grounded in retrieved Articles,
+# not creative text, so a low temperature favors consistent wording/citations
+# over variety. Also stabilizes eval runs -- a wildly varying answer length
+# between identical /query calls is what let the RAGAS judge's max_tokens
+# budget (src/evaluation/judge.py) get exceeded intermittently rather than
+# consistently.
+OPENAI_TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0.0"))
+
 # scripts/evaluate.py's RAGAS judge model, configured independently of OPENAI_MODEL
 # so changing the model under test doesn't change how strictly it's judged.
 EVAL_JUDGE_BASE_URL = os.getenv("EVAL_JUDGE_BASE_URL")
