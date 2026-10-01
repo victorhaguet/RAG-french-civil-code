@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +38,8 @@ from src.evaluation.guardrail_report import GuardrailReport, evaluate_guardrail_
 from src.evaluation.judge import build_judge_metrics
 from src.evaluation.report import render_markdown_report
 
+logger = logging.getLogger(__name__)
+
 GOLDEN_QUESTIONS_PATH = "eval/golden_questions.jsonl"
 OUT_OF_SCOPE_QUESTIONS_PATH = "eval/out_of_scope_questions.jsonl"
 INJECTION_ATTEMPTS_PATH = "eval/injection_attempts.jsonl"
@@ -45,6 +48,13 @@ RESULTS_REPORT_PATH = "eval/results.md"
 
 
 def main() -> None:
+    # INFO on the root logger so every module's logger.info(...) -- this
+    # script's own progress, and the full /query pipeline's (src.api.app,
+    # src.retrieval.keyword_index, ...) -- surfaces here, with a timestamp:
+    # the key piece of information to diagnose where and how long a run is
+    # stuck, not just that it is.
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--base-url",
@@ -64,15 +74,15 @@ def main() -> None:
     args = parser.parse_args()
     client = build_query_client(args.base_url)
 
-    print("Scoring Golden Questions...", flush=True)
+    logger.info("Scoring Golden Questions...")
     golden_report = evaluate_golden_questions(
         client, load_golden_questions(GOLDEN_QUESTIONS_PATH), build_judge_metrics
     )
-    print("Scoring Out-of-Scope Questions...", flush=True)
+    logger.info("Scoring Out-of-Scope Questions...")
     out_of_scope_report = evaluate_guardrail_questions(
         client, load_guardrail_questions(OUT_OF_SCOPE_QUESTIONS_PATH)
     )
-    print("Scoring Injection Attempts...", flush=True)
+    logger.info("Scoring Injection Attempts...")
     injection_report = evaluate_guardrail_questions(
         client, load_guardrail_questions(INJECTION_ATTEMPTS_PATH)
     )

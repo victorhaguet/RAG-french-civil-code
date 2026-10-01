@@ -9,11 +9,14 @@ variance.
 
 from __future__ import annotations
 
+import logging
 import re
 import threading
 from typing import Any
 
 from src.storage.article_store import ArticleStore
+
+logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 
@@ -50,12 +53,17 @@ def _get_stopwords() -> frozenset[str]:
         try:
             nltk.data.find("corpora/stopwords")
         except LookupError:
+            logger.info(
+                "nltk stopwords corpus not cached, downloading (timeout=%ss)...",
+                _NLTK_DOWNLOAD_TIMEOUT,
+            )
             previous_timeout = socket.getdefaulttimeout()
             socket.setdefaulttimeout(_NLTK_DOWNLOAD_TIMEOUT)
             try:
                 nltk.download("stopwords", quiet=True)
             finally:
                 socket.setdefaulttimeout(previous_timeout)
+            logger.info("nltk stopwords download finished")
         from nltk.corpus import stopwords
 
         _stopwords = frozenset(stopwords.words("french"))
@@ -108,12 +116,14 @@ class KeywordIndex:
             # index built.
             from rank_bm25 import BM25Okapi
 
+            logger.info("Building BM25 index (first search)...")
             articles = self._article_store.all()
             refs = [article["ref"] for article in articles]
             corpus = [tokenize(article["texte"]) for article in articles]
             if corpus:
                 self._refs = refs
                 self._bm25 = BM25Okapi(corpus)
+            logger.info("BM25 index built: %d article(s)", len(refs))
 
     def search(self, query: str, k: int) -> list[str]:
         """Rank Article refs by BM25 relevance to `query`.

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import sys
+import logging
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
@@ -10,6 +10,8 @@ from typing import Any
 from src.evaluation.client import QueryClient
 from src.evaluation.dataset import GoldenQuestion
 from src.evaluation.metrics import ScorableMetric
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -111,20 +113,21 @@ def _score_golden_question(
     index: int,
     total: int,
 ) -> GoldenQuestionScore:
-    # Printed with explicit flush (not relying on PYTHONUNBUFFERED) and at
-    # each real step, not just per-question: a hang anywhere in here -- the
-    # pipeline call, either judge call -- previously produced zero output
-    # until the whole run finished, making a stuck CI job indistinguishable
-    # from a slow-but-fine one (see git history around 2026-10-01).
-    _progress(f"[{index}/{total}] {golden['question']!r}: calling /query...")
+    # Logged at each real step, not just per-question: a hang anywhere in here
+    # -- the pipeline call, either judge call -- previously produced zero
+    # output until the whole run finished, making a stuck CI job
+    # indistinguishable from a slow-but-fine one (see git history around
+    # 2026-10-01). logging's StreamHandler flushes on every record, so this
+    # appears immediately without needing PYTHONUNBUFFERED.
+    logger.info("[%d/%d] %r: calling /query...", index, total, golden["question"])
     response = client.post("/query", json={"question": golden["question"]})
     response.raise_for_status()
     body = response.json()
-    _progress(f"[{index}/{total}] /query done, {len(body['articles'])} article(s)")
+    logger.info("[%d/%d] /query done, %d article(s)", index, total, len(body["articles"]))
 
     contexts = [_fetch_article_text(client, article["ref"]) for article in body["articles"]]
 
-    _progress(f"[{index}/{total}] scoring faithfulness...")
+    logger.info("[%d/%d] scoring faithfulness...", index, total)
     faithfulness_score = _safe_judge_score(
         golden["question"],
         "faithfulness",
@@ -133,7 +136,7 @@ def _score_golden_question(
         response=body["answer"],
         retrieved_contexts=contexts,
     )
-    _progress(f"[{index}/{total}] faithfulness done, scoring context_recall...")
+    logger.info("[%d/%d] faithfulness done, scoring context_recall...", index, total)
     context_recall_score = _safe_judge_score(
         golden["question"],
         "context_recall",
@@ -142,7 +145,7 @@ def _score_golden_question(
         retrieved_contexts=contexts,
         reference=golden["reference_answer"],
     )
-    _progress(f"[{index}/{total}] context_recall done")
+    logger.info("[%d/%d] context_recall done", index, total)
 
     return GoldenQuestionScore(
         question=golden["question"],
@@ -167,14 +170,9 @@ def _safe_judge_score(question: str, metric_name: str, metric: ScorableMetric, *
     """
     try:
         return metric.score(**kwargs).value
-    except Exception as exc:
-        print(f"  ! {metric_name} judge error on {question!r}: {exc}", file=sys.stderr, flush=True)
+    except Exception:
+        logger.warning("judge error (%s) on %r", metric_name, question, exc_info=True)
         return None
-
-
-def _progress(message: str) -> None:
-    """Explicit, immediately-flushed progress output -- see `_score_golden_question`."""
-    print(message, flush=True)
 
 
 def _fetch_article_text(client: QueryClient, ref: str) -> str:

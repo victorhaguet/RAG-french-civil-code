@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
 from src.evaluation.client import QueryClient
 from src.evaluation.dataset import GuardrailQuestion
 from src.evaluation.guardrail import is_out_of_scope_answer
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -68,9 +71,7 @@ def evaluate_guardrail_questions(
     results = []
     total = len(questions)
     for i, item in enumerate(questions, start=1):
-        # Flushed explicitly, not relying on PYTHONUNBUFFERED: see
-        # src.evaluation.golden's _progress for why this matters.
-        print(f"[{i}/{total}] {item['question']!r}: calling /query...", flush=True)
+        logger.info("[%d/%d] %r: calling /query...", i, total, item["question"])
         response = client.post("/query", json={"question": item["question"]})
         response.raise_for_status()
         answer = response.json()["answer"]
