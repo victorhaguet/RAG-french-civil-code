@@ -64,12 +64,15 @@ def main() -> None:
     args = parser.parse_args()
     client = build_query_client(args.base_url)
 
+    print("Scoring Golden Questions...", flush=True)
     golden_report = evaluate_golden_questions(
         client, load_golden_questions(GOLDEN_QUESTIONS_PATH), build_judge_metrics
     )
+    print("Scoring Out-of-Scope Questions...", flush=True)
     out_of_scope_report = evaluate_guardrail_questions(
         client, load_guardrail_questions(OUT_OF_SCOPE_QUESTIONS_PATH)
     )
+    print("Scoring Injection Attempts...", flush=True)
     injection_report = evaluate_guardrail_questions(
         client, load_guardrail_questions(INJECTION_ATTEMPTS_PATH)
     )

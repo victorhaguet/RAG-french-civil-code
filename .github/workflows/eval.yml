@@ -61,6 +61,13 @@ jobs:
       # Pinned independently of whatever EMBEDDING_MODEL a contributor has
       # locally, so eval results are CPU-friendly and consistent across runs.
       EMBEDDING_MODEL: intfloat/multilingual-e5-small
+      # Belt-and-suspenders alongside scripts/evaluate.py's explicit
+      # print(..., flush=True) calls: Python block-buffers stdout by default
+      # when it isn't a TTY (true of this log), so without one of these, a
+      # hang anywhere in this step can look identical to one with correctly
+      # flushed output -- this also covers library-internal prints we don't
+      # control.
+      PYTHONUNBUFFERED: "1"
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v4

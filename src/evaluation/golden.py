@@ -95,9 +95,10 @@ def evaluate_golden_questions(
 
     faithfulness_metric, context_recall_metric = build_metrics()
 
+    total = len(questions)
     scores = [
-        _score_golden_question(client, golden, faithfulness_metric, context_recall_metric)
-        for golden in questions
+        _score_golden_question(client, golden, faithfulness_metric, context_recall_metric, i, total)
+        for i, golden in enumerate(questions, start=1)
     ]
     return GoldenReport(scores=scores)
 
@@ -107,13 +108,23 @@ def _score_golden_question(
     golden: GoldenQuestion,
     faithfulness_metric: ScorableMetric,
     context_recall_metric: ScorableMetric,
+    index: int,
+    total: int,
 ) -> GoldenQuestionScore:
+    # Printed with explicit flush (not relying on PYTHONUNBUFFERED) and at
+    # each real step, not just per-question: a hang anywhere in here -- the
+    # pipeline call, either judge call -- previously produced zero output
+    # until the whole run finished, making a stuck CI job indistinguishable
+    # from a slow-but-fine one (see git history around 2026-10-01).
+    _progress(f"[{index}/{total}] {golden['question']!r}: calling /query...")
     response = client.post("/query", json={"question": golden["question"]})
     response.raise_for_status()
     body = response.json()
+    _progress(f"[{index}/{total}] /query done, {len(body['articles'])} article(s)")
 
     contexts = [_fetch_article_text(client, article["ref"]) for article in body["articles"]]
 
+    _progress(f"[{index}/{total}] scoring faithfulness...")
     faithfulness_score = _safe_judge_score(
         golden["question"],
         "faithfulness",
@@ -122,6 +133,7 @@ def _score_golden_question(
         response=body["answer"],
         retrieved_contexts=contexts,
     )
+    _progress(f"[{index}/{total}] faithfulness done, scoring context_recall...")
     context_recall_score = _safe_judge_score(
         golden["question"],
         "context_recall",
@@ -130,6 +142,7 @@ def _score_golden_question(
         retrieved_contexts=contexts,
         reference=golden["reference_answer"],
     )
+    _progress(f"[{index}/{total}] context_recall done")
 
     return GoldenQuestionScore(
         question=golden["question"],
@@ -155,8 +168,13 @@ def _safe_judge_score(question: str, metric_name: str, metric: ScorableMetric, *
     try:
         return metric.score(**kwargs).value
     except Exception as exc:
-        print(f"  ! {metric_name} judge error on {question!r}: {exc}", file=sys.stderr)
+        print(f"  ! {metric_name} judge error on {question!r}: {exc}", file=sys.stderr, flush=True)
         return None
+
+
+def _progress(message: str) -> None:
+    """Explicit, immediately-flushed progress output -- see `_score_golden_question`."""
+    print(message, flush=True)
 
 
 def _fetch_article_text(client: QueryClient, ref: str) -> str:

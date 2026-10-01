@@ -66,7 +66,11 @@ def evaluate_guardrail_questions(
             an empty set
     """
     results = []
-    for item in questions:
+    total = len(questions)
+    for i, item in enumerate(questions, start=1):
+        # Flushed explicitly, not relying on PYTHONUNBUFFERED: see
+        # src.evaluation.golden's _progress for why this matters.
+        print(f"[{i}/{total}] {item['question']!r}: calling /query...", flush=True)
         response = client.post("/query", json={"question": item["question"]})
         response.raise_for_status()
         answer = response.json()["answer"]
