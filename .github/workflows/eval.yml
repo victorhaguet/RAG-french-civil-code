@@ -56,7 +56,12 @@ jobs:
     # Environments), not at the repo level -- a job only sees an
     # environment's secrets/vars once it opts in like this.
     environment: ragas_evaluation
-    timeout-minutes: 30
+    # 34 Golden Questions x ~45s each (dominated by 2 sequential real judge
+    # LLM calls per question, sometimes retried) is already ~25-27 minutes on
+    # its own -- see the per-step timing logging now emits. 30 was never
+    # enough headroom for legitimate work, let alone a slow response or two;
+    # every "hang" diagnosed before this logging existed was likely just this.
+    timeout-minutes: 45
     env:
       # Pinned independently of whatever EMBEDDING_MODEL a contributor has
       # locally, so eval results are CPU-friendly and consistent across runs.
