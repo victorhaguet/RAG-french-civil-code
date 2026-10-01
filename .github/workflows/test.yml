@@ -19,7 +19,12 @@ jobs:
         run: uv python install
 
       - name: Install dependencies
-        run: uv sync --locked
+        # --extra cpu: this runner has no GPU, so pull torch's CPU-only build
+        # instead of the ~3GB CUDA runtime the cu124 extra resolves to (see
+        # pyproject.toml's [tool.uv.sources] comment). Required -- torch has
+        # no default extra, so omitting this falls back to PyPI's newest
+        # (CUDA-bundled) build instead of failing loudly.
+        run: uv sync --locked --extra cpu
 
       - name: Run tests with coverage
         run: uv run pytest --cov=src --cov-fail-under=90

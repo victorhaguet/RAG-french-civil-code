@@ -21,10 +21,15 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 Clone the repo, then install the dependencies. `uv sync` creates a `.venv` for you and
-`uv run` uses it automatically, so there's no manual virtualenv activation needed:
+`uv run` uses it automatically, so there's no manual virtualenv activation needed.
+
+`torch` has no default build: pick `--extra cu124` (NVIDIA GPU, CUDA 12.4+ driver) or
+`--extra cpu` (no GPU, or a GPU this project doesn't support) explicitly — see "Embedding
+model" below for the tradeoff. Omitting both doesn't fail, it silently resolves to PyPI's
+newest `torch` build instead, which is its own (different, larger) CUDA download:
 
 ```bash
-uv sync
+uv sync --extra cu124    # or --extra cpu
 ```
 
 Copy the example environment file and fill in your OpenAI API key:
@@ -46,8 +51,8 @@ retrieval. It's a ~560M-parameter model, so it wants a GPU to be fast — on an 
 VRAM) it embeds a query in well under 50ms and re-ingests this repo's whole corpus (~2,900
 articles) in under a minute. It still runs on CPU, just slowly.
 
-**No GPU?** Set `EMBEDDING_MODEL` in `.env` to
-[`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small)
+**No GPU?** Install with `uv sync --extra cpu` (see "Setup" above), and set `EMBEDDING_MODEL`
+in `.env` to [`intfloat/multilingual-e5-small`](https://huggingface.co/intfloat/multilingual-e5-small)
 instead — a much smaller model in the same family that runs comfortably on CPU, at some cost
 to retrieval quality. Only these two models are supported out of the box; using a different
 embedding model family means editing `src/retrieval/embeddings.py`, since each family has its
@@ -112,10 +117,13 @@ three hand-authored question sets in `eval/`: Golden Questions (RAGAS `faithfuln
 guardrail-pass rate). See CONTEXT.md's Evaluation section for what each set is.
 
 Install the `eval` dependency group first — kept separate from `dev` since it pulls in RAGAS's
-heavy dependency chain (`langchain`, `langgraph`, ...), which the app itself never needs:
+heavy dependency chain (`langchain`, `langgraph`, ...), which the app itself never needs.
+Repeat whichever `--extra` you used in Setup — `uv sync` reconciles the venv to exactly the
+extras/groups given each time, so omitting it here would swap your GPU/CPU `torch` build back
+out:
 
 ```bash
-uv sync --group eval
+uv sync --extra cu124 --group eval    # or --extra cpu
 ```
 
 Then run it, either in-process (real dependency wiring, no separate server needed) or against a
