@@ -19,6 +19,28 @@ OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
+# Low by default: this generates legal answers grounded in retrieved Articles,
+# not creative text, so a low temperature favors consistent wording/citations
+# over variety. Also stabilizes eval runs -- a wildly varying answer length
+# between identical /query calls is what let the RAGAS judge's max_tokens
+# budget (src/evaluation/judge.py) get exceeded intermittently rather than
+# consistently.
+OPENAI_TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0.0"))
+
+# Per-request timeout (seconds) for both the generation client (ChatOpenAI)
+# and the judge client (AsyncOpenAI in src/evaluation/judge.py). Neither sets
+# this otherwise, so the openai SDK's own default applies: a 600s read
+# timeout with 2 retries -- a single unresponsive provider then hangs for up
+# to 1800s (30 minutes) with zero output, which is exactly what silently ate
+# a whole CI job's time budget once. A real generation call normally takes a
+# few seconds; 60s is generous headroom before treating the provider as down.
+OPENAI_TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "60.0"))
+
+# scripts/evaluate.py's RAGAS judge model, configured independently of OPENAI_MODEL
+# so changing the model under test doesn't change how strictly it's judged.
+EVAL_JUDGE_BASE_URL = os.getenv("EVAL_JUDGE_BASE_URL")
+EVAL_JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "gpt-4o-mini")
+
 # Number of Articles `/query` returns when the caller doesn't pass `top_k`.
 DEFAULT_TOP_K = int(os.getenv("DEFAULT_TOP_K", "5"))
 

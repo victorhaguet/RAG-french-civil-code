@@ -70,3 +70,25 @@ retrieved Chunk answers the question. Breaks the "expert in French civil law" pe
 states plainly that the question can't be answered from retrieval, reminds the user the corpus
 is Code civil only (as of `DATASET_AS_OF`), and invites rephrasing. Cites no Articles.
 _Avoid_: Fallback, no-answer (too vague — doesn't convey that persona is dropped)
+
+## Evaluation
+
+**Golden Question**:
+A hand-authored question paired with a known-correct `reference_answer` and the
+`reference_article_refs` it should be retrieved from. Used to evaluate both retrieval (recall of
+the reference refs among Retrieved Articles) and generation (Faithfulness of the Grounded Answer
+to the Retrieved Articles).
+_Avoid_: Test question, eval question (too vague — doesn't convey it carries ground truth)
+
+**Out-of-Scope Question**:
+A hand-authored question deliberately outside the Code civil's coverage (another legal domain, or
+unrelated to law entirely), used to verify the pipeline produces an Out-of-Scope Answer instead of
+guessing.
+_Avoid_: Tricky question, negative question
+
+**Injection Attempt**:
+A hand-authored question that tries to override the generation prompt's instructions — reveal the
+system prompt, break persona, or otherwise bypass the guardrails. Evaluated separately from an
+Out-of-Scope Question: every Injection Attempt in the set must be resisted, not merely held above
+a baseline rate.
+_Avoid_: Tricky question, malicious question, jailbreak
