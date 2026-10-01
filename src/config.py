@@ -27,6 +27,15 @@ OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 # consistently.
 OPENAI_TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0.0"))
 
+# Per-request timeout (seconds) for both the generation client (ChatOpenAI)
+# and the judge client (AsyncOpenAI in src/evaluation/judge.py). Neither sets
+# this otherwise, so the openai SDK's own default applies: a 600s read
+# timeout with 2 retries -- a single unresponsive provider then hangs for up
+# to 1800s (30 minutes) with zero output, which is exactly what silently ate
+# a whole CI job's time budget once. A real generation call normally takes a
+# few seconds; 60s is generous headroom before treating the provider as down.
+OPENAI_TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "60.0"))
+
 # scripts/evaluate.py's RAGAS judge model, configured independently of OPENAI_MODEL
 # so changing the model under test doesn't change how strictly it's judged.
 EVAL_JUDGE_BASE_URL = os.getenv("EVAL_JUDGE_BASE_URL")

@@ -62,7 +62,11 @@ def build_judge_metrics() -> tuple[ScorableMetric, ScorableMetric]:
     # `asyncio.run(self.ascore(...))`, which always calls the LLM wrapper's
     # `.agenerate()` -- that raises TypeError unless the wrapped client is
     # async (llm_factory's own docs build it from AsyncOpenAI for this reason).
-    client = AsyncOpenAI(base_url=config.EVAL_JUDGE_BASE_URL, api_key=config.OPENAI_API_KEY)
+    client = AsyncOpenAI(
+        base_url=config.EVAL_JUDGE_BASE_URL,
+        api_key=config.OPENAI_API_KEY,
+        timeout=config.OPENAI_TIMEOUT,
+    )
     llm = llm_factory(
         config.EVAL_JUDGE_MODEL,
         client=client,
