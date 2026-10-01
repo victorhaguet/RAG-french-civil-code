@@ -20,6 +20,14 @@ _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 _stemmer: Any | None = None
 _stopwords: frozenset[str] | None = None
 
+# nltk.download() has no timeout of its own and can hang indefinitely if its
+# download host is slow or unreachable -- seen in CI, where a GitHub Actions
+# job silently hung for its full 30-minute budget here, on the very first
+# Keyword Index build. Bounded the same way src.config.OPENAI_TIMEOUT bounds
+# the LLM clients, via the only lever urllib (which nltk's downloader uses)
+# exposes for this: the process-wide default socket timeout.
+_NLTK_DOWNLOAD_TIMEOUT = 30.0
+
 
 def _get_stemmer() -> Any:
     global _stemmer
@@ -35,12 +43,19 @@ def _get_stemmer() -> Any:
 def _get_stopwords() -> frozenset[str]:
     global _stopwords
     if _stopwords is None:
+        import socket
+
         import nltk
 
         try:
             nltk.data.find("corpora/stopwords")
         except LookupError:
-            nltk.download("stopwords", quiet=True)
+            previous_timeout = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(_NLTK_DOWNLOAD_TIMEOUT)
+            try:
+                nltk.download("stopwords", quiet=True)
+            finally:
+                socket.setdefaulttimeout(previous_timeout)
         from nltk.corpus import stopwords
 
         _stopwords = frozenset(stopwords.words("french"))
