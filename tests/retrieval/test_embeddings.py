@@ -63,18 +63,6 @@ def test_embed_query_uses_the_french_instruction_for_the_instruct_model() -> Non
     assert prompt.endswith("\nQuery: Quand une loi entre-t-elle en vigueur ?")
 
 
-def test_embed_query_uses_the_english_instruction_for_the_instruct_model() -> None:
-    model = FakeModel()
-    embeddings = MultilingualE5Embeddings(model=model, model_name=INSTRUCT_MODEL)
-
-    embeddings.embed_query("When does a law enter into force?")
-
-    [call] = model.encode_calls
-    [prompt] = call
-    assert prompt.endswith("\nQuery: When does a law enter into force?")
-    assert "retrieve the Code civil articles" in prompt
-
-
 def test_embed_query_returns_a_single_vector() -> None:
     model = FakeModel()
     embeddings = MultilingualE5Embeddings(model=model, model_name=FIXED_PREFIX_MODEL)

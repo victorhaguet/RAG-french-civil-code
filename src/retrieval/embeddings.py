@@ -4,8 +4,7 @@ Two members of the family are supported, selected via `config.EMBEDDING_MODEL`
 (env var `EMBEDDING_MODEL`) or the `model_name` constructor arg:
 
 - `intfloat/multilingual-e5-large-instruct` (the default): documents get no
-  prefix; queries get a French/English instruction prefix, chosen via
-  `detect_query_language`. Needs a GPU to be fast.
+  prefix; queries get a French instruction prefix. Needs a GPU to be fast.
 - `intfloat/multilingual-e5-small` (the CPU-friendly fallback): documents and
   queries get a fixed `"passage: "`/`"query: "` prefix, regardless of
   language.
@@ -22,7 +21,6 @@ from typing import Any
 from langchain_core.embeddings import Embeddings
 
 from src import config
-from src.retrieval.language import detect_query_language
 
 FIXED_PREFIX_MODEL = "intfloat/multilingual-e5-small"
 INSTRUCT_MODEL = "intfloat/multilingual-e5-large-instruct"
@@ -31,16 +29,10 @@ SUPPORTED_MODELS = (FIXED_PREFIX_MODEL, INSTRUCT_MODEL)
 DOCUMENT_PREFIX = "passage: "
 QUERY_PREFIX = "query: "
 
-QUERY_INSTRUCTIONS = {
-    "fr": (
-        "Étant donné une question juridique, retrouve les articles du Code "
-        "civil pertinents pour y répondre."
-    ),
-    "en": (
-        "Given a legal question, retrieve the Code civil articles relevant "
-        "to answering it."
-    ),
-}
+QUERY_INSTRUCTION = (
+    "Étant donné une question juridique, retrouve les articles du Code "
+    "civil pertinents pour y répondre."
+)
 
 
 class MultilingualE5Embeddings(Embeddings):
@@ -93,8 +85,8 @@ class MultilingualE5Embeddings(Embeddings):
         """Embed a query.
 
         The query is prefixed according to `self._model_name`'s convention:
-        an instruction (adapted to the query's detected language) for
-        `INSTRUCT_MODEL`, or the fixed `"query: "` prefix otherwise.
+        the French instruction for `INSTRUCT_MODEL`, or the fixed `"query: "`
+        prefix otherwise.
 
         Args:
             text (str): Query to embed
@@ -103,8 +95,7 @@ class MultilingualE5Embeddings(Embeddings):
             list[float]: Vector obtained
         """
         if self._model_name == INSTRUCT_MODEL:
-            instruction = QUERY_INSTRUCTIONS[detect_query_language(text)]
-            prefixed = f"Instruct: {instruction}\nQuery: {text}"
+            prefixed = f"Instruct: {QUERY_INSTRUCTION}\nQuery: {text}"
         else:
             prefixed = QUERY_PREFIX + text
         [embedding] = self._model.encode([prefixed], normalize_embeddings=True)

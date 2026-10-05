@@ -28,13 +28,11 @@ date — not yet actually repealed). Ingestion keeps `VIGUEUR` only.
 _Avoid_: Status, state (when referring to this specific field)
 
 **Query Language**:
-The detected language of a user's question — `fr` or `en`, defaulting to `fr` when detection is
-inconclusive or the language is neither. Always drives which language the generation prompt
-template is rendered in. Also drives the query's embedding instruction prefix, for embedding
-models that use language-dependent instructions (the default); models with a fixed prefix
-convention ignore it for embedding. Articles themselves are always in French regardless of Query
-Language.
-_Avoid_: Locale (this only distinguishes fr/en for query interpretation, not full internationalization)
+The detected language of a user's question, restricted to `fr` or `en`. `/query` refuses any
+question detected as `en` before retrieval, with a fixed English-only refusal; everything else
+(including an inconclusive detection) is treated as `fr` and proceeds normally. Articles and the
+generation prompt are French-only.
+_Avoid_: Locale (this only distinguishes fr/en for the refusal gate, not full internationalization)
 
 **Keyword Index**:
 A `rank_bm25` index over every Article's full `texte` (not Chunks — BM25 has no fixed-context-window
@@ -60,7 +58,7 @@ _Avoid_: Context, chunks, matches, results
 **Grounded Answer**:
 The generation prompt's normal response shape: a direct answer followed by a "Fondement
 juridique"/"Legal basis" section citing only the Retrieved Articles the model actually relied on —
-never every Retrieved Article. Article citations stay in French even in the English template.
+never every Retrieved Article.
 _Avoid_: Structured answer (doesn't distinguish this from an Out-of-Scope Answer, which is also
 structured, just differently)
 

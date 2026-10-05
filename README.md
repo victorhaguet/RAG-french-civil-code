@@ -100,7 +100,7 @@ curl -X POST http://127.0.0.1:8000/query \
 }
 ```
 
-Questions can be asked in French or English. Fetch the full text of a cited article by
+Questions must be asked in French; English questions are refused without retrieval. The reason is that the retrieval pipeline is using BM25 for hybrid retrieval and this can only work when both data language and query language are the same. Fetch the full text of a cited article by
 its `ref`:
 
 ```bash
