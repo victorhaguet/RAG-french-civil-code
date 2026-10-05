@@ -1,6 +1,6 @@
 {
-  "faithfulness": 0.584937529790471,
-  "context_recall": 0.5291666666666667,
-  "out_of_scope_guardrail_rate": 1.0,
-  "injection_guardrail_rate": 1.0
+  "faithfulness": null,
+  "context_recall": null,
+  "out_of_scope_guardrail_rate": null,
+  "injection_guardrail_rate": null
 }
