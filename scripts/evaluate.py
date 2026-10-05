@@ -6,19 +6,21 @@ sets. Also writes a full Markdown report -- every question's own answer, retriev
 articles, and score/pass-fail, not just the aggregates -- to `eval/results.md`.
 Safe to run before those files are populated: every metric then reports "no data".
 
-Three modes (`--mode`):
+Modes (`--mode`):
     report (default)  Print the scores and exit 0.
     gate               Also compare the scores against the committed
                         `eval/baseline.json` (via `src.evaluation.gate`) and exit
                         non-zero, printing the regressed metric(s), on failure.
-    update-baseline    Overwrite `eval/baseline.json` with the just-computed
-                        scores. Intended to be run only after a passing `gate` run.
+
+`--update-baseline` (only with `--mode gate`) is applied in the same run, after the
+gate passes: each metric in `eval/baseline.json` is raised to the just-computed score
+when that score is strictly better, and kept otherwise. The evaluation runs once.
 
 Usage:
     uv run scripts/evaluate.py
     uv run scripts/evaluate.py --base-url http://localhost:8000
     uv run scripts/evaluate.py --mode gate
-    uv run scripts/evaluate.py --mode update-baseline
+    uv run scripts/evaluate.py --mode gate --update-baseline
 """
 
 from __future__ import annotations
@@ -64,14 +66,20 @@ def main() -> None:
     )
     parser.add_argument(
         "--mode",
-        choices=["report", "gate", "update-baseline"],
+        choices=["report", "gate"],
         default="report",
         help="'report' (default) prints the scores and exits 0. 'gate' also compares "
-        "them against eval/baseline.json and exits non-zero on regression. "
-        "'update-baseline' overwrites eval/baseline.json with the computed scores "
-        "-- run only after a passing 'gate' run.",
+        "them against eval/baseline.json and exits non-zero on regression.",
+    )
+    parser.add_argument(
+        "--update-baseline",
+        action="store_true",
+        help="With '--mode gate': once the gate passes, raise each eval/baseline.json metric "
+        "to the computed score when it is strictly better, otherwise keep it.",
     )
     args = parser.parse_args()
+    if args.update_baseline and args.mode != "gate":
+        parser.error("--update-baseline requires --mode gate")
     client = build_query_client(args.base_url)
 
     logger.info("Scoring Golden Questions...")
@@ -97,9 +105,7 @@ def main() -> None:
     scores = _build_scores(golden_report, out_of_scope_report, injection_report)
 
     if args.mode == "gate":
-        _run_gate(scores)
-    elif args.mode == "update-baseline":
-        _update_baseline(scores)
+        _run_gate(scores, update_baseline=args.update_baseline)
 
 
 def _print_golden_report(report: GoldenReport) -> None:
@@ -166,7 +172,7 @@ def _build_scores(
     }
 
 
-def _run_gate(scores: Scores) -> None:
+def _run_gate(scores: Scores, *, update_baseline: bool) -> None:
     baseline = _load_baseline()
     result = evaluate_gate(scores, baseline)
 
@@ -176,13 +182,15 @@ def _run_gate(scores: Scores) -> None:
         sys.exit(1)
     print("Gate: PASS")
 
+    if update_baseline:
+        _update_baseline(scores, baseline)
 
-def _update_baseline(scores: Scores) -> None:
-    """Overwrite `eval/baseline.json`, keeping each metric's previous value if `scores`
-    reports "no data" for it (e.g. a question set that's transiently empty) — a run with
-    no data for a metric must never regress a previously-established baseline value to
-    `null`, which would silently stop the gate from checking it."""
-    baseline = _load_baseline()
+
+def _update_baseline(scores: Scores, baseline: Scores) -> None:
+    """Overwrite `eval/baseline.json` with the computed scores, keeping each metric's previous
+    value if `scores` reports "no data" for it (e.g. a question set that's transiently empty) —
+    a run with no data for a metric must never regress a previously-established baseline value
+    to `null`, which would silently stop the gate from checking it."""
     merged: Scores = {
         "faithfulness": scores["faithfulness"] if scores["faithfulness"] is not None else baseline["faithfulness"],
         "context_recall": scores["context_recall"]

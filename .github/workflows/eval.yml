@@ -132,15 +132,13 @@ jobs:
             echo "EVAL_JUDGE_BASE_URL=${{ vars.EVAL_JUDGE_BASE_URL }}" >> "$GITHUB_ENV"
           fi
 
-      - name: Run the RAGAS score gate
+      - name: Run the RAGAS score gate and update the baseline
+        # One evaluation run: the gate compares it against the committed baseline,
+        # and only if it passes does the baseline get raised where this run beat it.
+        # A failing gate exits non-zero, which stops the job before the commit below.
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: uv run scripts/evaluate.py --mode gate
-
-      - name: Update the committed baseline
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        run: uv run scripts/evaluate.py --mode update-baseline
+        run: uv run scripts/evaluate.py --mode gate --update-baseline
 
       - name: Commit and push the updated baseline
         # GITHUB_TOKEN can only push to branches within this repo -- see the

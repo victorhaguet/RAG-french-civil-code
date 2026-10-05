@@ -146,14 +146,15 @@ It's regenerated on every run and never committed.
 
 ```bash
 uv run scripts/evaluate.py --mode gate              # compare against eval/baseline.json, exit non-zero on regression
-uv run scripts/evaluate.py --mode update-baseline    # overwrite eval/baseline.json with the computed scores
+uv run scripts/evaluate.py --mode gate --update-baseline    # same, and on pass overwrite eval/baseline.json with the computed scores
 ```
 
 `gate` mode fails if `faithfulness`, `context_recall`, or `out_of_scope_guardrail_rate` drop below
 `eval/baseline.json`'s corresponding value, or if `injection_guardrail_rate` is anything less than
 `1.0` (checked unconditionally, independent of the baseline). A metric with no data — its question
-set is still empty — is skipped rather than counted as a pass or a failure. `update-baseline` mode
-is intended to run only after a `gate` run has passed.
+set is still empty — is skipped rather than counted as a pass or a failure. `--update-baseline`
+(with `--mode gate`) runs in the same evaluation, only after the gate passes, and overwrites
+`eval/baseline.json` with the computed scores.
 
 ## License
 
