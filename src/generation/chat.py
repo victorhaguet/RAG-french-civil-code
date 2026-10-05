@@ -27,4 +27,6 @@ def build_chat_model() -> Any:
         base_url=config.OPENAI_BASE_URL,
         api_key=api_key,
         model=config.OPENAI_MODEL,
+        temperature=config.OPENAI_TEMPERATURE,
+        timeout=config.OPENAI_TIMEOUT,
     )

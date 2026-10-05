@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -25,6 +26,8 @@ from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
 
 app = FastAPI()
+
+logger = logging.getLogger(__name__)
 
 
 def _ranked_refs_from_chunks(chunks: list[Document]) -> list[str]:
@@ -111,22 +114,31 @@ def query(
     Returns:
         QueryResponse: the generated answer and the Retrieved Articles it cites
     """
+    logger.info("Query: %r", request.question)
     fetch_k = max(config.FETCH_K_MULTIPLIER * request.top_k, config.MIN_FETCH_K)
 
     chunks = store.similarity_search(request.question, k=fetch_k)
     vector_refs = _ranked_refs_from_chunks(chunks)
+    logger.info("Vector search: %d chunk(s) -> %d article(s)", len(chunks), len(vector_refs))
+
     keyword_refs = keyword_index.search(request.question, k=fetch_k)
+    logger.info("BM25 search: %d article(s)", len(keyword_refs))
 
     candidate_refs = reciprocal_rank_fusion(
         [keyword_refs, vector_refs],
         weights=[config.RRF_WEIGHT_BM25, config.RRF_WEIGHT_VECTOR],
         k=config.RRF_K,
     )
+    logger.info("Fused to %d candidate(s)", len(candidate_refs))
+
     candidate_articles = _resolve_articles(candidate_refs, article_store)
     articles = reranker.rerank(request.question, candidate_articles)[: request.top_k]
+    logger.info("Reranked to %d article(s)", len(articles))
 
     prompt = render_prompt(question=request.question, articles=articles)
+    logger.info("Calling chat model...")
     answer = chat_model.invoke(prompt).content
+    logger.info("Chat model responded (%d chars)", len(answer))
 
     return QueryResponse(
         answer=answer,

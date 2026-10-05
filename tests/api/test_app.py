@@ -1,6 +1,5 @@
 from pathlib import Path
 
-import pytest
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 
@@ -19,25 +18,7 @@ from src.retrieval.keyword_index import KeywordIndex
 from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
 from tests.factories import raw_row
-from tests.fakes import FakeChatModel, FakeCrossEncoder, FakeModel
-
-
-class _PassthroughCrossEncoder:
-    """Scores pairs by descending input order, so reranking is a no-op.
-
-    Used as the default Reranker in tests that predate reranking and assert
-    on fusion order directly — real reordering is covered separately by
-    `test_query_reranks_candidates_by_cross_encoder_score`.
-    """
-
-    def predict(self, pairs: list[tuple[str, str]]) -> list[float]:
-        return [-index for index in range(len(pairs))]
-
-
-@pytest.fixture(autouse=True)
-def _clear_dependency_overrides():
-    yield
-    app.dependency_overrides.clear()
+from tests.fakes import FakeChatModel, FakeCrossEncoder, FakeModel, PassthroughCrossEncoder
 
 
 def _populate(tmp_path: Path, model: FakeModel, rows: list[dict] | None = None):
@@ -71,7 +52,7 @@ def _client_for(
     app.dependency_overrides[get_chat_model] = lambda: chat_model
     app.dependency_overrides[get_bm25_index] = lambda: KeywordIndex(article_store)
     app.dependency_overrides[get_reranker] = lambda: reranker or Reranker(
-        model=_PassthroughCrossEncoder()
+        model=PassthroughCrossEncoder()
     )
     return TestClient(app)
 
