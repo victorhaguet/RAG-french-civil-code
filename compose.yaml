@@ -1,0 +1,32 @@
+# Single source for the embedding model, shared by the build (which bakes the
+# vector store with it) and the runtime (which must embed queries with it).
+x-embedding-model: &embedding-model intfloat/multilingual-e5-small
+
+services:
+  api:
+    build:
+      context: .
+      args:
+        EMBEDDING_MODEL: *embedding-model
+    image: rag-french-civil-code:latest
+    # Optional: without it the container still starts and /health works, only
+    # /query needs OPENAI_API_KEY.
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      # No value: passed through from the shell when exported there; when
+      # it isn't, .env's value is kept rather than overridden with "".
+      OPENAI_API_KEY:
+      # Pinned to what the image baked: `environment` wins over `env_file`,
+      # so a local .env can't point the API at a different embedding model
+      # or at data that doesn't exist in the image.
+      EMBEDDING_MODEL: *embedding-model
+      CHROMA_PERSIST_DIR: /app/data/chroma
+      CHROMA_COLLECTION_NAME: code_civil
+      ARTICLES_DB_PATH: /app/data/articles.db
+    ports:
+      # Localhost only: /query is unauthenticated and spends the OpenAI key.
+      - "127.0.0.1:8000:8000"
+    # Healthcheck on /health: defined in the Dockerfile, inherited here.
+    restart: unless-stopped

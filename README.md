@@ -78,6 +78,26 @@ uv run uvicorn src.api.app:app --reload
 
 The server listens on `http://127.0.0.1:8000` by default.
 
+## Running with Docker
+
+Alternatively, run the API in a self-contained, CPU-only container — no local Python, uv or
+`data/` needed, only Docker with the Compose plugin:
+
+```bash
+docker compose up --build
+```
+
+The first build runs the ingestion inside the image (downloading the dataset and the models,
+then embedding every article on CPU), so it takes a few minutes; later builds reuse the cached
+layers. The image uses `intfloat/multilingual-e5-small` regardless of `EMBEDDING_MODEL` in your
+`.env`, and downloads nothing at runtime.
+
+`.env` is optional: when present it's loaded into the container at runtime (it's never copied
+into the image), and an `OPENAI_API_KEY` exported in your shell takes precedence over it.
+Without either, the container still starts and serves `/health` and `/articles/{ref}` — only
+`/query` needs the key. The API is published on `http://127.0.0.1:8000` (localhost only), and
+the container restarts automatically unless you stop it (`docker compose down`).
+
 ## Usage
 
 Ask a question:
