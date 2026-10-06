@@ -1,0 +1,90 @@
+# Docker image smoke test: builds the image exactly as compose.yaml describes
+# it, brings it up with Docker Compose and checks it can serve Articles. Fails
+# the PR if the image doesn't build, doesn't become healthy, or can't resolve
+# a known Article. Uses no secrets (the build only embeds, never calls OpenAI,
+# and /health + /articles/{ref} don't need OPENAI_API_KEY), so it also runs on
+# fork PRs.
+name: Docker Smoke Test
+
+on:
+  pull_request:
+    # Everything the image is built from (see the Dockerfile's COPY lines and
+    # .dockerignore), plus this workflow itself.
+    paths:
+      - "Dockerfile"
+      - "compose.yaml"
+      - ".dockerignore"
+      - "src/**"
+      - "prompts/**"
+      - "scripts/ingest.py"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/docker.yml"
+
+# A newer push to the same PR supersedes the run in flight.
+concurrency:
+  group: docker-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    # A cold build (dependency install, model downloads, CPU ingestion of
+    # every Article) takes several minutes; cached builds are much faster.
+    timeout-minutes: 45
+    env:
+      # GET /articles/{ref} target: Article 1 of the Code civil (in force).
+      SMOKE_ARTICLE_REF: "Code civil, art. 1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        # Bake reads compose.yaml, so the build args (EMBEDDING_MODEL) and the
+        # image tag stay defined in one place. The GitHub Actions layer cache
+        # (mode=max: intermediate layers too) means a push that changes
+        # neither the dependencies nor the ingestion inputs reuses those
+        # layers instead of reinstalling/re-embedding. `load` puts the image
+        # in the local Docker daemon for `docker compose up` below.
+        uses: docker/bake-action@v6
+        with:
+          source: .
+          files: compose.yaml
+          targets: api
+          load: true
+          set: |
+            api.cache-from=type=gha,scope=docker-smoke
+            api.cache-to=type=gha,mode=max,scope=docker-smoke
+
+      - name: Start the stack
+        # --wait blocks until the Dockerfile's /health HEALTHCHECK passes and
+        # fails if the container exits or turns unhealthy. --no-build: use the
+        # image just built rather than building it again without the cache.
+        # No .env exists here, which compose.yaml's `required: false` allows.
+        run: docker compose up --detach --wait --wait-timeout 300 --no-build
+
+      - name: Check /health
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8000/health \
+            | jq --exit-status '.status == "ok"'
+
+      - name: Check GET /articles/{ref}
+        run: |
+          # The ref contains spaces and a comma: URL-encode it as the path.
+          encoded_ref=$(jq --raw-output --null-input --arg ref "$SMOKE_ARTICLE_REF" '$ref | @uri')
+          curl --fail --silent --show-error "http://127.0.0.1:8000/articles/${encoded_ref}" \
+            | jq --exit-status --arg ref "$SMOKE_ARTICLE_REF" \
+                '.ref == $ref and .etat == "VIGUEUR" and (.texte | length > 0)'
+
+      - name: Show container logs
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down the stack
+        if: always()
+        run: docker compose down
