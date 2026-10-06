@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from langchain_core.documents import Document
 
-from src.api.app import _ranked_refs_from_chunks, _resolve_articles, app
+from src.api.app import NON_FRENCH_REFUSAL, _ranked_refs_from_chunks, _resolve_articles, app
 from src.api.dependencies import (
     get_article_store,
     get_bm25_index,
@@ -118,6 +118,36 @@ def test_query_embeds_the_question_with_the_query_prefix(tmp_path: Path) -> None
 
     [prefixed_text] = model.encode_calls[-1]
     assert prefixed_text == "query: Quand une loi entre-t-elle en vigueur ?"
+
+
+def test_query_refuses_an_english_question_without_retrieval_or_generation(
+    tmp_path: Path,
+) -> None:
+    model = FakeModel()
+    chat_model = FakeChatModel()
+    client = _client(tmp_path, model, chat_model)
+    encodes_before = len(model.encode_calls)
+
+    response = client.post("/query", json={"question": "When does a law enter into force?"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == NON_FRENCH_REFUSAL
+    assert body["articles"] == []
+    assert chat_model.invoke_calls == []
+    assert len(model.encode_calls) == encodes_before
+
+
+def test_query_answers_a_french_question_as_before(tmp_path: Path) -> None:
+    model = FakeModel()
+    chat_model = FakeChatModel(answer="Voici la réponse.")
+    client = _client(tmp_path, model, chat_model)
+
+    response = client.post("/query", json={"question": "Quand une loi entre-t-elle en vigueur ?"})
+
+    assert response.status_code == 200
+    assert response.json()["answer"] == "Voici la réponse."
+    assert len(chat_model.invoke_calls) == 1
 
 
 def test_query_reranks_candidates_by_cross_encoder_score(tmp_path: Path) -> None:

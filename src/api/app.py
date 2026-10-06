@@ -22,12 +22,21 @@ from src.generation.prompt import render_prompt
 from src.ingestion.dataset import Article
 from src.retrieval.fusion import reciprocal_rank_fusion
 from src.retrieval.keyword_index import KeywordIndex
+from src.retrieval.language import detect_query_language
 from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
 
 app = FastAPI()
 
 logger = logging.getLogger(__name__)
+
+# Fixed, English-only, and deliberately not generated: the corpus and the
+# whole pipeline are French-only, so a non-French question is redirected
+# before any retrieval, embedding or LLM call.
+NON_FRENCH_REFUSAL = (
+    "This tool only answers questions in French, about the Code civil. "
+    "Please rephrase your question in French."
+)
 
 
 def _ranked_refs_from_chunks(chunks: list[Document]) -> list[str]:
@@ -115,6 +124,10 @@ def query(
         QueryResponse: the generated answer and the Retrieved Articles it cites
     """
     logger.info("Query: %r", request.question)
+    if detect_query_language(request.question) != "fr":
+        logger.info("Non-French query refused before retrieval")
+        return QueryResponse(answer=NON_FRENCH_REFUSAL, articles=[])
+
     fetch_k = max(config.FETCH_K_MULTIPLIER * request.top_k, config.MIN_FETCH_K)
 
     chunks = store.similarity_search(request.question, k=fetch_k)

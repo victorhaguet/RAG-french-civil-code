@@ -1,4 +1,7 @@
-"""Detecting a query's language (French/English, French fallback) via Lingua."""
+"""Detecting a query's language (French/English, French fallback) via Lingua.
+
+Used by `/query` to refuse English questions before retrieval.
+"""
 
 from __future__ import annotations
 
