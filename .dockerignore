@@ -1,0 +1,17 @@
+# Secrets: never in the build context, let alone the image.
+.env
+.env.*
+
+# Local environment, data and caches: the image builds its own.
+.venv/
+data/
+.git/
+**/__pycache__/
+**/*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.claude/
+.vscode/
+eval/results.md
