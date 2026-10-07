@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 
@@ -26,3 +27,11 @@ class ScorableMetric(Protocol):
     def score(self, **kwargs: Any) -> MetricScore:
         """Score one sample; the result's `.value` is the metric score in [0, 1]."""
         ...
+
+
+@dataclass(frozen=True)
+class JudgeMetrics:
+    """The two RAGAS metrics every Golden Question is scored against, bound to the judge LLM."""
+
+    faithfulness: ScorableMetric
+    context_recall: ScorableMetric

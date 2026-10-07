@@ -327,8 +327,18 @@ def test_get_article_returns_the_full_article(tmp_path: Path) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["ref"] == "A1"
     assert body["texte"] == "Les lois s'appliquent dès leur entrée en vigueur."
+    assert body == article_store.get("A1")
+    assert set(body) == {
+        "ref",
+        "texte",
+        "dateDebut",
+        "dateFin",
+        "etat",
+        "version_article",
+        "origine",
+        "sectionParentTitre",
+    }
 
 
 def test_get_article_returns_404_for_an_unknown_ref(tmp_path: Path) -> None:

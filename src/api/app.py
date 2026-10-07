@@ -17,7 +17,7 @@ from src.api.dependencies import (
     get_reranker,
     get_store,
 )
-from src.api.schemas import ArticleDetailOut, ArticleOut, QueryRequest, QueryResponse
+from src.api.schemas import ArticleOut, QueryRequest, QueryResponse
 from src.generation.prompt import render_prompt
 from src.ingestion.dataset import Article
 from src.retrieval.fusion import reciprocal_rank_fusion
@@ -159,12 +159,12 @@ def query(
     )
 
 
-@app.get("/articles/{ref}", response_model=ArticleDetailOut)
+@app.get("/articles/{ref}", response_model=Article)
 def get_article(
     ref: str, article_store: ArticleStore = Depends(get_article_store)
-) -> ArticleDetailOut:
+) -> Article:
     """Resolve a `ref` to its full Article."""
     article = article_store.get(ref)
     if article is None:
         raise HTTPException(status_code=404, detail="Article not found.")
-    return ArticleDetailOut(**article)
+    return article

@@ -9,7 +9,7 @@ from typing import Any
 
 from src.evaluation.client import QueryClient
 from src.evaluation.dataset import GoldenQuestion
-from src.evaluation.metrics import ScorableMetric
+from src.evaluation.metrics import JudgeMetrics, ScorableMetric
 
 logger = logging.getLogger(__name__)
 
@@ -96,10 +96,11 @@ def evaluate_golden_questions(
         return GoldenReport()
 
     faithfulness_metric, context_recall_metric = build_metrics()
+    metrics = JudgeMetrics(faithfulness=faithfulness_metric, context_recall=context_recall_metric)
 
     total = len(questions)
     scores = [
-        _score_golden_question(client, golden, faithfulness_metric, context_recall_metric, i, total)
+        _score_golden_question(client, golden, metrics, i, total)
         for i, golden in enumerate(questions, start=1)
     ]
     return GoldenReport(scores=scores)
@@ -108,8 +109,7 @@ def evaluate_golden_questions(
 def _score_golden_question(
     client: QueryClient,
     golden: GoldenQuestion,
-    faithfulness_metric: ScorableMetric,
-    context_recall_metric: ScorableMetric,
+    metrics: JudgeMetrics,
     index: int,
     total: int,
 ) -> GoldenQuestionScore:
@@ -131,7 +131,7 @@ def _score_golden_question(
     faithfulness_score = _safe_judge_score(
         golden["question"],
         "faithfulness",
-        faithfulness_metric,
+        metrics.faithfulness,
         user_input=golden["question"],
         response=body["answer"],
         retrieved_contexts=contexts,
@@ -140,7 +140,7 @@ def _score_golden_question(
     context_recall_score = _safe_judge_score(
         golden["question"],
         "context_recall",
-        context_recall_metric,
+        metrics.context_recall,
         user_input=golden["question"],
         retrieved_contexts=contexts,
         reference=golden["reference_answer"],

@@ -5,24 +5,19 @@ Used by `/query` to refuse English questions before retrieval.
 
 from __future__ import annotations
 
+import functools
 from typing import Any, Literal
 
 QueryLanguage = Literal["fr", "en"]
 
-_detector: Any | None = None
 
-
+@functools.cache
 def _get_detector() -> Any:
-    global _detector
-    if _detector is None:
-        # Imported lazily so tests that don't need real detection never pay
-        # for building Lingua's language models.
-        from lingua import Language, LanguageDetectorBuilder
+    # Imported lazily so tests that don't need real detection never pay
+    # for building Lingua's language models.
+    from lingua import Language, LanguageDetectorBuilder
 
-        _detector = LanguageDetectorBuilder.from_languages(
-            Language.FRENCH, Language.ENGLISH
-        ).build()
-    return _detector
+    return LanguageDetectorBuilder.from_languages(Language.FRENCH, Language.ENGLISH).build()
 
 
 def detect_query_language(text: str) -> QueryLanguage:
