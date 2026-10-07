@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable
+from typing import Any
 
 from langchain_chroma import Chroma
 from langchain_core.embeddings import Embeddings
@@ -16,7 +17,7 @@ from src.storage.article_store import ArticleStore
 
 def run_ingestion(
     *,
-    raw_rows: Iterable[dict] | None = None,
+    raw_rows: Iterable[dict[str, Any]] | None = None,
     embeddings: Embeddings | None = None,
     persist_directory: str | None = None,
     collection_name: str | None = None,
@@ -28,7 +29,7 @@ def run_ingestion(
     a fake embedder in tests, bypassing the network and the real model.
 
     Args:
-        raw_rows (Iterable[dict] | None, optional): Set custom raw rows for test purposes. Defaults to None.
+        raw_rows (Iterable[dict[str, Any]] | None, optional): Set custom raw rows for test purposes. Defaults to None.
         embeddings (Embeddings | None, optional): Set custom embeddings for test purposes. Defaults to None.
         persist_directory (str | None, optional): Directory to save the chroma.db vectorstore. Defaults to None.
         collection_name (str | None, optional): Name of the collection. Defaults to None.

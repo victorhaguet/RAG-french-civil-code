@@ -1,5 +1,7 @@
 from pathlib import Path
+from typing import Any
 
+from langchain_chroma import Chroma
 from langchain_core.embeddings import Embeddings
 
 from src.ingestion.pipeline import run_ingestion
@@ -21,7 +23,7 @@ class FakeEmbeddings(Embeddings):
         return [float((hash(text) >> (8 * i)) % 100) for i in range(4)]
 
 
-def _raw_row(**overrides: object) -> dict:
+def _raw_row(**overrides: object) -> dict[str, Any]:
     defaults = {
         "ref": "LEGIARTI1",
         "texte": "Short in-force article.",
@@ -33,7 +35,7 @@ def _raw_row(**overrides: object) -> dict:
     return _base_raw_row(**defaults)
 
 
-def _run(tmp_path: Path, raw_rows: list[dict]):
+def _run(tmp_path: Path, raw_rows: list[dict[str, Any]]) -> Chroma:
     return run_ingestion(
         raw_rows=raw_rows,
         embeddings=FakeEmbeddings(),

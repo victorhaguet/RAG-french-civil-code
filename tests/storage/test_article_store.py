@@ -44,8 +44,10 @@ def test_replace_all_makes_every_article_resolvable(tmp_path: Path) -> None:
 
     store.replace_all(articles)
 
-    assert store.get("A1")["texte"] == "Premier texte."
-    assert store.get("A2")["texte"] == "Second texte."
+    first = store.get("A1")
+    second = store.get("A2")
+    assert first is not None and first["texte"] == "Premier texte."
+    assert second is not None and second["texte"] == "Second texte."
 
 
 def test_replace_all_rebuilds_from_scratch_dropping_previous_articles(tmp_path: Path) -> None:
@@ -81,4 +83,5 @@ def test_reopening_the_same_path_sees_previously_persisted_articles(tmp_path: Pa
 
     reopened = ArticleStore(path)
 
-    assert reopened.get("A1")["texte"] == "Persisted text."
+    article = reopened.get("A1")
+    assert article is not None and article["texte"] == "Persisted text."

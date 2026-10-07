@@ -1,6 +1,8 @@
 from pathlib import Path
+from typing import Any
 
 from fastapi.testclient import TestClient
+from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 from src.api.app import NON_FRENCH_REFUSAL, _ranked_refs_from_chunks, _resolve_articles, app
@@ -21,7 +23,9 @@ from tests.factories import raw_row
 from tests.fakes import FakeChatModel, FakeCrossEncoder, FakeModel, PassthroughCrossEncoder
 
 
-def _populate(tmp_path: Path, model: FakeModel, rows: list[dict] | None = None):
+def _populate(
+    tmp_path: Path, model: FakeModel, rows: list[dict[str, Any]] | None = None
+) -> tuple[Chroma, ArticleStore]:
     rows = rows or [
         raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR"),
         raw_row(ref="A2", texte="Repealed provision, no longer applicable.", etat="ABROGE_DIFF"),
@@ -42,7 +46,7 @@ def _populate(tmp_path: Path, model: FakeModel, rows: list[dict] | None = None):
 
 
 def _client_for(
-    store,
+    store: Chroma,
     article_store: ArticleStore,
     chat_model: FakeChatModel,
     reranker: Reranker | None = None,
@@ -250,7 +254,9 @@ def test_query_surfaces_via_the_keyword_index_an_article_vector_search_alone_wou
     assert "TUTELLE" in refs
 
 
-def _populate_with_two_in_force_articles(tmp_path: Path, model: FakeModel):
+def _populate_with_two_in_force_articles(
+    tmp_path: Path, model: FakeModel
+) -> tuple[Chroma, ArticleStore]:
     rows = [
         raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR"),
         raw_row(
@@ -335,7 +341,7 @@ def test_get_article_returns_404_for_an_unknown_ref(tmp_path: Path) -> None:
     assert response.status_code == 404
 
 
-def _seeded_article_store(tmp_path: Path, *rows: dict) -> ArticleStore:
+def _seeded_article_store(tmp_path: Path, *rows: dict[str, Any]) -> ArticleStore:
     store = ArticleStore(str(tmp_path / "articles.db"))
     store.replace_all(to_article(row) for row in rows)
     return store

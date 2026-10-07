@@ -1,9 +1,11 @@
 """Shared test data builders."""
 
+from typing import Any
 
-def raw_row(**overrides: object) -> dict:
+
+def raw_row(**overrides: object) -> dict[str, Any]:
     """A raw Code civil dataset row, shaped like a real HuggingFace row."""
-    row = {
+    row: dict[str, Any] = {
         "ref": "LEGIARTI000006419287",
         "texte": "Les lois et actes publiés au Journal officiel entrent en vigueur.",
         "dateDebut": 1086048000000,

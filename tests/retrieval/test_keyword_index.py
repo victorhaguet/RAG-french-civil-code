@@ -1,6 +1,7 @@
 """Tests for the BM25 Keyword Index, exercised against real rank_bm25 and nltk."""
 
 from pathlib import Path
+from typing import Any
 
 from src.ingestion.dataset import to_article
 from src.retrieval.keyword_index import KeywordIndex, tokenize
@@ -18,7 +19,7 @@ _DISTRACTORS = [
 ]
 
 
-def _store(tmp_path: Path, *rows: dict) -> ArticleStore:
+def _store(tmp_path: Path, *rows: dict[str, Any]) -> ArticleStore:
     store = ArticleStore(str(tmp_path / "articles.db"))
     store.replace_all(to_article(row) for row in rows)
     return store

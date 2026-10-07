@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
-from typing import TypedDict, cast
+from typing import Any, TypedDict, cast
 
 DATASET_NAME = "louisbrulenaudet/code-civil"
 DATASET_SPLIT = "train"
@@ -39,11 +39,11 @@ class Article(TypedDict):
     sectionParentTitre: str
 
 
-def load_raw_rows() -> Iterator[dict]:
+def load_raw_rows() -> Iterator[dict[str, Any]]:
     """Load every row of the Code civil dataset from HuggingFace.
 
     Returns:
-        Iterator[dict]: An iterator over the dataset rows, each row
+        Iterator[dict[str, Any]]: An iterator over the dataset rows, each row
         representing a specific article of the civil code.
     """
     # Imported lazily so tests that pass `raw_rows` directly never need to
@@ -54,11 +54,11 @@ def load_raw_rows() -> Iterator[dict]:
     return iter(dataset)
 
 
-def to_article(row: dict) -> Article:
+def to_article(row: dict[str, Any]) -> Article:
     """Project a raw dataset row down to the fields an Article keeps.
 
     Args:
-        row (dict): Dictionary containing one of the extracted rows of the
+        row (dict[str, Any]): Dictionary containing one of the extracted rows of the
         dataset.
 
     Returns:
@@ -80,13 +80,13 @@ def is_in_force(article: Article) -> bool:
     return article["etat"] == IN_FORCE_ETAT
 
 
-def load_articles(raw_rows: Iterable[dict] | None = None) -> list[Article]:
+def load_articles(raw_rows: Iterable[dict[str, Any]] | None = None) -> list[Article]:
     """Load in-force Articles, projected to their kept fields.
 
     Pass `raw_rows` to bypass the network call in tests.
 
     Args:
-        raw_rows (Iterable[dict] | None, optional): Raw rows to load. Defaults to None.
+        raw_rows (Iterable[dict[str, Any]] | None, optional): Raw rows to load. Defaults to None.
 
     Returns:
         list[Article]: List of articles object
