@@ -9,7 +9,7 @@ import numpy as np
 
 
 class FakeModel:
-    """Records what it was asked to encode; returns one fake vector per text.
+    """Records each `encode` call (texts and normalization); returns one fake vector per text.
 
     Returns a `numpy.float32` array, like the real `SentenceTransformer.encode`
     does, so tests that assert on the returned element type (native `float`,
@@ -18,9 +18,13 @@ class FakeModel:
 
     def __init__(self) -> None:
         self.encode_calls: list[list[str]] = []
+        self.normalize_embeddings_calls: list[bool] = []
 
-    def encode(self, texts: list[str], normalize_embeddings: bool = True) -> Any:
+    # Defaults to False, like the real `SentenceTransformer.encode`, so a
+    # caller that forgets to ask for normalized embeddings is recorded as such.
+    def encode(self, texts: list[str], normalize_embeddings: bool = False) -> Any:
         self.encode_calls.append(list(texts))
+        self.normalize_embeddings_calls.append(normalize_embeddings)
         return np.array([[float(len(text))] for text in texts], dtype=np.float32)
 
 

@@ -9,6 +9,7 @@ variance.
 
 from __future__ import annotations
 
+import functools
 import logging
 import re
 import threading
@@ -20,9 +21,6 @@ logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 
-_stemmer: Any | None = None
-_stopwords: frozenset[str] | None = None
-
 # nltk.download() has no timeout of its own and can hang indefinitely if its
 # download host is slow or unreachable -- seen in CI, where a GitHub Actions
 # job silently hung for its full 30-minute budget here, on the very first
@@ -32,42 +30,38 @@ _stopwords: frozenset[str] | None = None
 _NLTK_DOWNLOAD_TIMEOUT = 30.0
 
 
+@functools.cache
 def _get_stemmer() -> Any:
-    global _stemmer
-    if _stemmer is None:
-        # Imported lazily so importing this module never pays nltk's cost
-        # for callers that don't end up using the Keyword Index.
-        from nltk.stem.snowball import SnowballStemmer
+    # Imported lazily so importing this module never pays nltk's cost
+    # for callers that don't end up using the Keyword Index.
+    from nltk.stem.snowball import SnowballStemmer
 
-        _stemmer = SnowballStemmer("french")
-    return _stemmer
+    return SnowballStemmer("french")
 
 
+@functools.cache
 def _get_stopwords() -> frozenset[str]:
-    global _stopwords
-    if _stopwords is None:
-        import socket
+    import socket
 
-        import nltk
+    import nltk
 
+    try:
+        nltk.data.find("corpora/stopwords")
+    except LookupError:
+        logger.info(
+            "nltk stopwords corpus not cached, downloading (timeout=%ss)...",
+            _NLTK_DOWNLOAD_TIMEOUT,
+        )
+        previous_timeout = socket.getdefaulttimeout()
+        socket.setdefaulttimeout(_NLTK_DOWNLOAD_TIMEOUT)
         try:
-            nltk.data.find("corpora/stopwords")
-        except LookupError:
-            logger.info(
-                "nltk stopwords corpus not cached, downloading (timeout=%ss)...",
-                _NLTK_DOWNLOAD_TIMEOUT,
-            )
-            previous_timeout = socket.getdefaulttimeout()
-            socket.setdefaulttimeout(_NLTK_DOWNLOAD_TIMEOUT)
-            try:
-                nltk.download("stopwords", quiet=True)
-            finally:
-                socket.setdefaulttimeout(previous_timeout)
-            logger.info("nltk stopwords download finished")
-        from nltk.corpus import stopwords
+            nltk.download("stopwords", quiet=True)
+        finally:
+            socket.setdefaulttimeout(previous_timeout)
+        logger.info("nltk stopwords download finished")
+    from nltk.corpus import stopwords
 
-        _stopwords = frozenset(stopwords.words("french"))
-    return _stopwords
+    return frozenset(stopwords.words("french"))
 
 
 def tokenize(text: str) -> list[str]:

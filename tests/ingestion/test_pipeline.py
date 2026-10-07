@@ -1,5 +1,7 @@
 from pathlib import Path
+from typing import Any
 
+from langchain_chroma import Chroma
 from langchain_core.embeddings import Embeddings
 
 from src.ingestion.pipeline import run_ingestion
@@ -21,7 +23,7 @@ class FakeEmbeddings(Embeddings):
         return [float((hash(text) >> (8 * i)) % 100) for i in range(4)]
 
 
-def _raw_row(**overrides: object) -> dict:
+def _raw_row(**overrides: object) -> dict[str, Any]:
     defaults = {
         "ref": "LEGIARTI1",
         "texte": "Short in-force article.",
@@ -33,7 +35,7 @@ def _raw_row(**overrides: object) -> dict:
     return _base_raw_row(**defaults)
 
 
-def _run(tmp_path: Path, raw_rows: list[dict]):
+def _run(tmp_path: Path, raw_rows: list[dict[str, Any]]) -> Chroma:
     return run_ingestion(
         raw_rows=raw_rows,
         embeddings=FakeEmbeddings(),
@@ -60,33 +62,22 @@ def test_only_vigueur_articles_are_stored(tmp_path: Path) -> None:
 
 
 def test_short_article_stored_as_a_single_chunk_with_full_metadata(tmp_path: Path) -> None:
-    rows = [
-        _raw_row(
-            ref="A1",
-            texte="Short text.",
-            dateDebut=1086048000000,
-            dateFin=32472144000000,
-            etat="VIGUEUR",
-            version_article="2.0",
-            origine="LEGI",
-            sectionParentTitre="Titre préliminaire",
-        )
-    ]
+    metadata = {
+        "dateDebut": 3,
+        "dateFin": 4,
+        "etat": "VIGUEUR",
+        "version_article": "3.0",
+        "origine": "JORF",
+        "sectionParentTitre": "Titre II",
+    }
+    rows = [_raw_row(ref="A1", texte="Short text.", **metadata)]
 
     store = _run(tmp_path, rows)
 
     stored = store.get(include=["metadatas", "documents"])
     assert stored["ids"] == ["A1#0"]
     assert stored["documents"] == ["Short text."]
-    assert stored["metadatas"][0] == {
-        "ref": "A1",
-        "dateDebut": 1086048000000,
-        "dateFin": 32472144000000,
-        "etat": "VIGUEUR",
-        "version_article": "2.0",
-        "origine": "LEGI",
-        "sectionParentTitre": "Titre préliminaire",
-    }
+    assert stored["metadatas"][0] == {"ref": "A1", **metadata}
 
 
 def test_long_article_split_into_multiple_sequential_chunks(tmp_path: Path) -> None:

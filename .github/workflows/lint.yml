@@ -1,0 +1,58 @@
+# Static checks over all Python code (src, scripts, tests). Fails on any
+# finding. No path filter, so a required check is never left waiting on a
+# skipped run.
+name: Lint
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  mypy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        # --extra cpu: this runner has no GPU, so pull torch's CPU-only build
+        # (see test.yml). --group eval: src/evaluation/judge.py imports ragas,
+        # which only the eval group installs; without it mypy reports
+        # import-not-found on every ragas import.
+        run: uv sync --locked --extra cpu --group eval
+
+      - name: Run mypy
+        run: uv run mypy src scripts tests
+
+  pylint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        # Same as the mypy job: --extra cpu for torch's CPU-only build,
+        # --group eval so pylint can import ragas (src/evaluation/judge.py)
+        # instead of reporting import-error.
+        run: uv sync --locked --extra cpu --group eval
+
+      - name: Run pylint
+        # No --fail-under: pylint exits non-zero on any finding.
+        run: uv run pylint src scripts tests

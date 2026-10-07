@@ -1,6 +1,6 @@
 from src.generation.prompt import render_prompt
-from src.ingestion.dataset import Article, to_article
-from tests.factories import raw_row
+from src.ingestion.dataset import Article
+from tests import factories
 
 
 def _article(
@@ -8,7 +8,7 @@ def _article(
     texte: str = "Les lois s'appliquent dès leur entrée en vigueur.",
     section: str = "Titre préliminaire",
 ) -> Article:
-    return to_article(raw_row(ref=ref, texte=texte, sectionParentTitre=section))
+    return factories.article(ref=ref, texte=texte, sectionParentTitre=section)
 
 
 def test_render_prompt_always_renders_the_french_template() -> None:

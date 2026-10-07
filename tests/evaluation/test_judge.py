@@ -1,4 +1,5 @@
 import sys
+from collections.abc import Iterator
 
 import pytest
 
@@ -8,7 +9,7 @@ _MODULE_NAME = "langchain_community.chat_models.vertexai"
 
 
 @pytest.fixture(autouse=True)
-def _clear_stub():
+def _clear_stub() -> Iterator[None]:
     sys.modules.pop(_MODULE_NAME, None)
     yield
     sys.modules.pop(_MODULE_NAME, None)

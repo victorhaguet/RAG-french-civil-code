@@ -3,27 +3,17 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException
-from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 from src import config
-from src.api.dependencies import (
-    get_article_store,
-    get_bm25_index,
-    get_chat_model,
-    get_reranker,
-    get_store,
-)
-from src.api.schemas import ArticleDetailOut, ArticleOut, QueryRequest, QueryResponse
+from src.api.dependencies import QueryPipeline, get_article_store, get_query_pipeline
+from src.api.schemas import ArticleOut, QueryRequest, QueryResponse
 from src.generation.prompt import render_prompt
 from src.ingestion.dataset import Article
 from src.retrieval.fusion import reciprocal_rank_fusion
-from src.retrieval.keyword_index import KeywordIndex
 from src.retrieval.language import detect_query_language
-from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
 
 app = FastAPI()
@@ -104,21 +94,14 @@ def health() -> dict[str, str]:
 @app.post("/query", response_model=QueryResponse)
 def query(
     request: QueryRequest,
-    store: Chroma = Depends(get_store),
-    chat_model: Any = Depends(get_chat_model),
-    article_store: ArticleStore = Depends(get_article_store),
-    keyword_index: KeywordIndex = Depends(get_bm25_index),
-    reranker: Reranker = Depends(get_reranker),
+    pipeline: QueryPipeline = Depends(get_query_pipeline),
 ) -> QueryResponse:
     """Retrieve the most relevant Articles via Hybrid Retrieval, rerank, and generate a grounded answer.
 
     Args:
         request (QueryRequest): Query request received from the user
-        store (Chroma, optional): Chroma vectorstore. Defaults to Depends(get_store).
-        chat_model (Any, optional): LLM. Defaults to Depends(get_chat_model).
-        article_store (ArticleStore, optional): SQL article store. Defaults to Depends(get_article_store).
-        keyword_index (KeywordIndex, optional): BM25 keyword index. Defaults to Depends(get_bm25_index).
-        reranker (Reranker, optional): cross-encoder Reranker. Defaults to Depends(get_reranker).
+        pipeline (QueryPipeline, optional): the components the query runs
+            through. Defaults to Depends(get_query_pipeline).
 
     Returns:
         QueryResponse: the generated answer and the Retrieved Articles it cites
@@ -130,11 +113,11 @@ def query(
 
     fetch_k = max(config.FETCH_K_MULTIPLIER * request.top_k, config.MIN_FETCH_K)
 
-    chunks = store.similarity_search(request.question, k=fetch_k)
+    chunks = pipeline.vector_store.similarity_search(request.question, k=fetch_k)
     vector_refs = _ranked_refs_from_chunks(chunks)
     logger.info("Vector search: %d chunk(s) -> %d article(s)", len(chunks), len(vector_refs))
 
-    keyword_refs = keyword_index.search(request.question, k=fetch_k)
+    keyword_refs = pipeline.keyword_index.search(request.question, k=fetch_k)
     logger.info("BM25 search: %d article(s)", len(keyword_refs))
 
     candidate_refs = reciprocal_rank_fusion(
@@ -144,13 +127,13 @@ def query(
     )
     logger.info("Fused to %d candidate(s)", len(candidate_refs))
 
-    candidate_articles = _resolve_articles(candidate_refs, article_store)
-    articles = reranker.rerank(request.question, candidate_articles)[: request.top_k]
+    candidate_articles = _resolve_articles(candidate_refs, pipeline.article_store)
+    articles = pipeline.reranker.rerank(request.question, candidate_articles)[: request.top_k]
     logger.info("Reranked to %d article(s)", len(articles))
 
     prompt = render_prompt(question=request.question, articles=articles)
     logger.info("Calling chat model...")
-    answer = chat_model.invoke(prompt).content
+    answer = pipeline.chat_model.invoke(prompt).content
     logger.info("Chat model responded (%d chars)", len(answer))
 
     return QueryResponse(
@@ -159,12 +142,12 @@ def query(
     )
 
 
-@app.get("/articles/{ref}", response_model=ArticleDetailOut)
+@app.get("/articles/{ref}", response_model=Article)
 def get_article(
     ref: str, article_store: ArticleStore = Depends(get_article_store)
-) -> ArticleDetailOut:
+) -> Article:
     """Resolve a `ref` to its full Article."""
     article = article_store.get(ref)
     if article is None:
         raise HTTPException(status_code=404, detail="Article not found.")
-    return ArticleDetailOut(**article)
+    return article

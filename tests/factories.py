@@ -1,9 +1,13 @@
 """Shared test data builders."""
 
+from typing import Any
 
-def raw_row(**overrides: object) -> dict:
+from src.ingestion.dataset import Article, to_article
+
+
+def raw_row(**overrides: object) -> dict[str, Any]:
     """A raw Code civil dataset row, shaped like a real HuggingFace row."""
-    row = {
+    row: dict[str, Any] = {
         "ref": "LEGIARTI000006419287",
         "texte": "Les lois et actes publiés au Journal officiel entrent en vigueur.",
         "dateDebut": 1086048000000,
@@ -25,3 +29,8 @@ def raw_row(**overrides: object) -> dict:
     }
     row.update(overrides)
     return row
+
+
+def article(**overrides: object) -> Article:
+    """An Article, as ingestion keeps it from a `raw_row` with these overrides."""
+    return to_article(raw_row(**overrides))

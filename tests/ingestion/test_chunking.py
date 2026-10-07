@@ -1,24 +1,9 @@
 from src.ingestion.chunking import build_documents, chunk_article
-from src.ingestion.dataset import Article
-
-
-def _article(**overrides: object) -> Article:
-    article: Article = {
-        "ref": "LEGIARTI000006419287",
-        "texte": "Short article text.",
-        "dateDebut": 1086048000000,
-        "dateFin": 32472144000000,
-        "etat": "VIGUEUR",
-        "version_article": "2.0",
-        "origine": "LEGI",
-        "sectionParentTitre": "Titre préliminaire",
-    }
-    article.update(overrides)  # type: ignore[typeddict-item]
-    return article
+from tests import factories
 
 
 def test_short_article_becomes_a_single_chunk() -> None:
-    article = _article(ref="A1", texte="Short article text.")
+    article = factories.article(ref="A1", texte="Short article text.")
 
     documents = chunk_article(article)
 
@@ -30,7 +15,7 @@ def test_short_article_becomes_a_single_chunk() -> None:
 def test_long_article_is_split_into_multiple_chunks_with_sequential_ids() -> None:
     long_text = "Une phrase juridique assez longue pour forcer un découpage. " * 30
     assert len(long_text) > 800
-    article = _article(ref="A2", texte=long_text)
+    article = factories.article(ref="A2", texte=long_text)
 
     documents = chunk_article(article)
 
@@ -41,7 +26,7 @@ def test_long_article_is_split_into_multiple_chunks_with_sequential_ids() -> Non
 
 
 def test_article_at_exactly_the_chunk_size_stays_a_single_chunk() -> None:
-    article = _article(ref="A2b", texte="x" * 800)
+    article = factories.article(ref="A2b", texte="x" * 800)
 
     documents = chunk_article(article)
 
@@ -50,7 +35,7 @@ def test_article_at_exactly_the_chunk_size_stays_a_single_chunk() -> None:
 
 
 def test_article_one_character_over_the_chunk_size_is_split() -> None:
-    article = _article(ref="A2c", texte="x" * 801)
+    article = factories.article(ref="A2c", texte="x" * 801)
 
     documents = chunk_article(article)
 
@@ -60,7 +45,7 @@ def test_article_one_character_over_the_chunk_size_is_split() -> None:
 
 def test_consecutive_chunks_overlap() -> None:
     long_text = "Une phrase juridique assez longue pour forcer un découpage. " * 30
-    article = _article(ref="A3", texte=long_text)
+    article = factories.article(ref="A3", texte=long_text)
 
     documents = chunk_article(article)
 
@@ -69,7 +54,7 @@ def test_consecutive_chunks_overlap() -> None:
 
 
 def test_every_chunk_carries_the_articles_metadata() -> None:
-    article = _article(
+    article = factories.article(
         ref="A4",
         texte="Text.",
         dateDebut=1,
@@ -96,7 +81,7 @@ def test_every_chunk_carries_the_articles_metadata() -> None:
 
 def test_each_chunks_metadata_is_an_independent_copy() -> None:
     long_text = "Une phrase juridique assez longue pour forcer un découpage. " * 30
-    article = _article(ref="A7", texte=long_text)
+    article = factories.article(ref="A7", texte=long_text)
 
     documents = chunk_article(article)
 
@@ -107,7 +92,7 @@ def test_each_chunks_metadata_is_an_independent_copy() -> None:
 
 
 def test_build_documents_chunks_every_article_in_order() -> None:
-    articles = [_article(ref="A5", texte="First."), _article(ref="A6", texte="Second.")]
+    articles = [factories.article(ref="A5", texte="First."), factories.article(ref="A6", texte="Second.")]
 
     documents = build_documents(articles)
 

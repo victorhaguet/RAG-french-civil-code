@@ -26,7 +26,7 @@ def test_a_clean_pass_when_every_metric_meets_or_beats_the_baseline() -> None:
     result = evaluate_gate(scores, _PASSING_BASELINE)
 
     assert result.passed is True
-    assert result.regressed_metrics == []
+    assert not result.regressed_metrics
 
 
 def test_a_regression_on_faithfulness_alone_fails_the_gate() -> None:
@@ -113,7 +113,7 @@ def test_injection_guardrail_rate_at_exactly_1_0_passes() -> None:
     result = evaluate_gate(_PASSING_BASELINE, _PASSING_BASELINE)
 
     assert result.passed is True
-    assert result.regressed_metrics == []
+    assert not result.regressed_metrics
 
 
 def test_a_metric_with_no_data_in_the_current_scores_is_skipped_not_failed() -> None:
@@ -127,14 +127,14 @@ def test_a_metric_with_no_data_in_the_current_scores_is_skipped_not_failed() -> 
     result = evaluate_gate(scores, _PASSING_BASELINE)
 
     assert result.passed is True
-    assert result.regressed_metrics == []
+    assert not result.regressed_metrics
 
 
 def test_the_no_data_bootstrap_case_passes_against_a_no_data_baseline() -> None:
     result = evaluate_gate(_NO_DATA_BASELINE, _NO_DATA_BASELINE)
 
     assert result.passed is True
-    assert result.regressed_metrics == []
+    assert not result.regressed_metrics
 
 
 def test_a_metric_with_data_but_no_baseline_yet_is_skipped_not_failed() -> None:
@@ -148,4 +148,4 @@ def test_a_metric_with_data_but_no_baseline_yet_is_skipped_not_failed() -> None:
     result = evaluate_gate(scores, _NO_DATA_BASELINE)
 
     assert result.passed is True
-    assert result.regressed_metrics == []
+    assert not result.regressed_metrics

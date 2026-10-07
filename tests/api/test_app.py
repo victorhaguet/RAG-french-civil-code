@@ -1,65 +1,27 @@
 from pathlib import Path
+from typing import Any
 
 from fastapi.testclient import TestClient
+from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
 from src.api.app import NON_FRENCH_REFUSAL, _ranked_refs_from_chunks, _resolve_articles, app
-from src.api.dependencies import (
-    get_article_store,
-    get_bm25_index,
-    get_chat_model,
-    get_reranker,
-    get_store,
-)
 from src.ingestion.dataset import to_article
-from src.ingestion.pipeline import run_ingestion
-from src.retrieval.embeddings import FIXED_PREFIX_MODEL, MultilingualE5Embeddings
-from src.retrieval.keyword_index import KeywordIndex
 from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
+from tests.app_wiring import client_for, ingest
 from tests.factories import raw_row
-from tests.fakes import FakeChatModel, FakeCrossEncoder, FakeModel, PassthroughCrossEncoder
+from tests.fakes import FakeChatModel, FakeCrossEncoder, FakeModel
 
 
-def _populate(tmp_path: Path, model: FakeModel, rows: list[dict] | None = None):
-    rows = rows or [
-        raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR"),
-        raw_row(ref="A2", texte="Repealed provision, no longer applicable.", etat="ABROGE_DIFF"),
-    ]
-    chroma_store = run_ingestion(
-        raw_rows=rows,
-        # Pinned to the fixed-prefix model regardless of config.EMBEDDING_MODEL:
-        # these tests exercise the API's wiring, not embedding-prefix behavior
-        # (covered by tests/retrieval/test_embeddings.py), and a fixed prefix
-        # keeps them deterministic without exercising real language detection.
-        embeddings=MultilingualE5Embeddings(model=model, model_name=FIXED_PREFIX_MODEL),
-        persist_directory=str(tmp_path / "chroma"),
-        collection_name="test_collection",
-        sqlite_path=str(tmp_path / "articles.db"),
-    )
-    article_store = ArticleStore(str(tmp_path / "articles.db"))
-    return chroma_store, article_store
-
-
-def _client_for(
-    store,
-    article_store: ArticleStore,
-    chat_model: FakeChatModel,
-    reranker: Reranker | None = None,
-) -> TestClient:
-    app.dependency_overrides[get_store] = lambda: store
-    app.dependency_overrides[get_article_store] = lambda: article_store
-    app.dependency_overrides[get_chat_model] = lambda: chat_model
-    app.dependency_overrides[get_bm25_index] = lambda: KeywordIndex(article_store)
-    app.dependency_overrides[get_reranker] = lambda: reranker or Reranker(
-        model=PassthroughCrossEncoder()
-    )
-    return TestClient(app)
+_ROWS = [
+    raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR"),
+    raw_row(ref="A2", texte="Repealed provision, no longer applicable.", etat="ABROGE_DIFF"),
+]
 
 
 def _client(tmp_path: Path, model: FakeModel, chat_model: FakeChatModel) -> TestClient:
-    store, article_store = _populate(tmp_path, model)
-    return _client_for(store, article_store, chat_model)
+    return client_for(*ingest(tmp_path, _ROWS, model), chat_model)
 
 
 def test_health_returns_a_liveness_check() -> None:
@@ -134,7 +96,7 @@ def test_query_refuses_an_english_question_without_retrieval_or_generation(
     body = response.json()
     assert body["answer"] == NON_FRENCH_REFUSAL
     assert body["articles"] == []
-    assert chat_model.invoke_calls == []
+    assert not chat_model.invoke_calls
     assert len(model.encode_calls) == encodes_before
 
 
@@ -171,15 +133,15 @@ def test_query_reranks_candidates_by_cross_encoder_score(tmp_path: Path) -> None
         ),
     ]
     model = FakeModel()
-    store, article_store = _populate(tmp_path, model, rows=rows)
+    store, article_store = ingest(tmp_path, rows, model)
 
     # Confirm the premise: without reranking (the passthrough double), fusion
     # alone ranks A1 first.
-    baseline_client = _client_for(store, article_store, FakeChatModel())
+    baseline_client = client_for(store, article_store, FakeChatModel())
     baseline = baseline_client.post("/query", json={"question": question, "top_k": 1})
     assert baseline.json()["articles"][0]["ref"] == "A1"
 
-    reranked_client = _client_for(
+    reranked_client = client_for(
         store,
         article_store,
         FakeChatModel(),
@@ -234,8 +196,8 @@ def test_query_surfaces_via_the_keyword_index_an_article_vector_search_alone_wou
             etat="VIGUEUR",
         ),
     ]
-    store, article_store = _populate(tmp_path, model, rows=rows)
-    client = _client_for(store, article_store, FakeChatModel())
+    store, article_store = ingest(tmp_path, rows, model)
+    client = client_for(store, article_store, FakeChatModel())
 
     # Confirm the premise: TUTELLE ranks outside top_k on vector search alone.
     vector_only_refs = [
@@ -250,7 +212,9 @@ def test_query_surfaces_via_the_keyword_index_an_article_vector_search_alone_wou
     assert "TUTELLE" in refs
 
 
-def _populate_with_two_in_force_articles(tmp_path: Path, model: FakeModel):
+def _populate_with_two_in_force_articles(
+    tmp_path: Path, model: FakeModel
+) -> tuple[Chroma, ArticleStore]:
     rows = [
         raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR"),
         raw_row(
@@ -263,13 +227,13 @@ def _populate_with_two_in_force_articles(tmp_path: Path, model: FakeModel):
             etat="VIGUEUR",
         ),
     ]
-    return _populate(tmp_path, model, rows=rows)
+    return ingest(tmp_path, rows, model)
 
 
 def test_query_uses_a_default_top_k_when_none_is_supplied(tmp_path: Path) -> None:
     model = FakeModel()
     store, article_store = _populate_with_two_in_force_articles(tmp_path, model)
-    client = _client_for(store, article_store, FakeChatModel())
+    client = client_for(store, article_store, FakeChatModel())
 
     response = client.post("/query", json={"question": "Quelle est la loi applicable ?"})
 
@@ -282,7 +246,7 @@ def test_query_uses_a_default_top_k_when_none_is_supplied(tmp_path: Path) -> Non
 def test_query_respects_a_caller_supplied_top_k(tmp_path: Path) -> None:
     model = FakeModel()
     store, article_store = _populate_with_two_in_force_articles(tmp_path, model)
-    client = _client_for(store, article_store, FakeChatModel())
+    client = client_for(store, article_store, FakeChatModel())
 
     response = client.post(
         "/query", json={"question": "Quelle est la loi applicable ?", "top_k": 1}
@@ -314,28 +278,36 @@ def test_no_ingest_route_is_exposed() -> None:
 
 def test_get_article_returns_the_full_article(tmp_path: Path) -> None:
     model = FakeModel()
-    store, article_store = _populate(tmp_path, model)
-    client = _client_for(store, article_store, FakeChatModel())
+    store, article_store = ingest(tmp_path, _ROWS, model)
+    client = client_for(store, article_store, FakeChatModel())
 
     response = client.get("/articles/A1")
 
     assert response.status_code == 200
-    body = response.json()
-    assert body["ref"] == "A1"
-    assert body["texte"] == "Les lois s'appliquent dès leur entrée en vigueur."
+    # Every kept field, with the values `raw_row` gives A1 in `_ROWS`.
+    assert response.json() == {
+        "ref": "A1",
+        "texte": "Les lois s'appliquent dès leur entrée en vigueur.",
+        "dateDebut": 1086048000000,
+        "dateFin": 32472144000000,
+        "etat": "VIGUEUR",
+        "version_article": "2.0",
+        "origine": "LEGI",
+        "sectionParentTitre": raw_row()["sectionParentTitre"],
+    }
 
 
 def test_get_article_returns_404_for_an_unknown_ref(tmp_path: Path) -> None:
     model = FakeModel()
-    store, article_store = _populate(tmp_path, model)
-    client = _client_for(store, article_store, FakeChatModel())
+    store, article_store = ingest(tmp_path, _ROWS, model)
+    client = client_for(store, article_store, FakeChatModel())
 
     response = client.get("/articles/UNKNOWN")
 
     assert response.status_code == 404
 
 
-def _seeded_article_store(tmp_path: Path, *rows: dict) -> ArticleStore:
+def _seeded_article_store(tmp_path: Path, *rows: dict[str, Any]) -> ArticleStore:
     store = ArticleStore(str(tmp_path / "articles.db"))
     store.replace_all(to_article(row) for row in rows)
     return store

@@ -5,23 +5,11 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from src.api.app import app
-from src.api.dependencies import (
-    get_article_store,
-    get_bm25_index,
-    get_chat_model,
-    get_reranker,
-    get_store,
-)
 from src.evaluation.dataset import GoldenQuestion
 from src.evaluation.golden import evaluate_golden_questions
-from src.ingestion.pipeline import run_ingestion
-from src.retrieval.embeddings import FIXED_PREFIX_MODEL, MultilingualE5Embeddings
-from src.retrieval.keyword_index import KeywordIndex
-from src.retrieval.reranker import Reranker
-from src.storage.article_store import ArticleStore
+from tests.app_wiring import client_for, ingest
 from tests.factories import raw_row
-from tests.fakes import FakeChatModel, FakeModel, PassthroughCrossEncoder
+from tests.fakes import FakeChatModel
 
 
 class _FakeScorableMetric:
@@ -37,21 +25,8 @@ class _FakeScorableMetric:
 
 
 def _client(tmp_path: Path, chat_model: FakeChatModel) -> TestClient:
-    model = FakeModel()
-    chroma_store = run_ingestion(
-        raw_rows=[raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR")],
-        embeddings=MultilingualE5Embeddings(model=model, model_name=FIXED_PREFIX_MODEL),
-        persist_directory=str(tmp_path / "chroma"),
-        collection_name="test_collection",
-        sqlite_path=str(tmp_path / "articles.db"),
-    )
-    article_store = ArticleStore(str(tmp_path / "articles.db"))
-    app.dependency_overrides[get_store] = lambda: chroma_store
-    app.dependency_overrides[get_article_store] = lambda: article_store
-    app.dependency_overrides[get_chat_model] = lambda: chat_model
-    app.dependency_overrides[get_bm25_index] = lambda: KeywordIndex(article_store)
-    app.dependency_overrides[get_reranker] = lambda: Reranker(model=PassthroughCrossEncoder())
-    return TestClient(app)
+    rows = [raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR")]
+    return client_for(*ingest(tmp_path, rows), chat_model)
 
 
 def test_reports_no_data_for_an_empty_question_set(tmp_path: Path) -> None:
@@ -65,7 +40,7 @@ def test_reports_no_data_for_an_empty_question_set(tmp_path: Path) -> None:
     assert report.has_data is False
     assert report.mean_faithfulness is None
     assert report.mean_context_recall is None
-    assert report.scores == []
+    assert not report.scores
 
 
 def test_scores_a_golden_question_via_the_real_query_endpoint(tmp_path: Path) -> None:
@@ -148,7 +123,7 @@ def test_mean_excludes_judge_errors_rather_than_counting_them_as_zero(tmp_path: 
     client = _client(tmp_path, FakeChatModel())
     results: list[float | None] = [0.8, None]
 
-    def _score(**kwargs: Any) -> Any:
+    def _score(**_kwargs: Any) -> Any:
         value = results.pop(0)
         if value is None:
             raise RuntimeError("simulated judge truncation")

@@ -30,16 +30,3 @@ class QueryResponse(BaseModel):
 
     answer: str
     articles: list[ArticleOut]
-
-
-class ArticleDetailOut(BaseModel):
-    """A full Article, as returned by `GET /articles/{ref}`."""
-
-    ref: str
-    texte: str
-    dateDebut: int
-    dateFin: int
-    etat: str
-    version_article: str
-    origine: str
-    sectionParentTitre: str

@@ -1,8 +1,7 @@
 from pathlib import Path
 
 from src.storage.article_store import ArticleStore
-from tests.factories import raw_row
-from src.ingestion.dataset import to_article
+from tests import factories
 
 
 def _store(tmp_path: Path) -> ArticleStore:
@@ -17,42 +16,33 @@ def test_get_returns_none_for_an_unknown_ref(tmp_path: Path) -> None:
 
 def test_replace_all_then_get_returns_the_full_article(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    article = to_article(
-        raw_row(
-            ref="A1",
-            texte="Les lois s'appliquent dès leur entrée en vigueur.",
-            dateDebut=1086048000000,
-            dateFin=32472144000000,
-            etat="VIGUEUR",
-            version_article="2.0",
-            origine="LEGI",
-            sectionParentTitre="Titre préliminaire",
-        )
-    )
+    original = factories.article(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.")
 
-    store.replace_all([article])
+    store.replace_all([original])
 
-    assert store.get("A1") == article
+    assert store.get("A1") == original
 
 
 def test_replace_all_makes_every_article_resolvable(tmp_path: Path) -> None:
     store = _store(tmp_path)
     articles = [
-        to_article(raw_row(ref="A1", texte="Premier texte.")),
-        to_article(raw_row(ref="A2", texte="Second texte.")),
+        factories.article(ref="A1", texte="Premier texte."),
+        factories.article(ref="A2", texte="Second texte."),
     ]
 
     store.replace_all(articles)
 
-    assert store.get("A1")["texte"] == "Premier texte."
-    assert store.get("A2")["texte"] == "Second texte."
+    first = store.get("A1")
+    second = store.get("A2")
+    assert first is not None and first["texte"] == "Premier texte."
+    assert second is not None and second["texte"] == "Second texte."
 
 
 def test_replace_all_rebuilds_from_scratch_dropping_previous_articles(tmp_path: Path) -> None:
     store = _store(tmp_path)
-    store.replace_all([to_article(raw_row(ref="A1")), to_article(raw_row(ref="A2"))])
+    store.replace_all([factories.article(ref="A1"), factories.article(ref="A2")])
 
-    store.replace_all([to_article(raw_row(ref="A1"))])
+    store.replace_all([factories.article(ref="A1")])
 
     assert store.get("A1") is not None
     assert store.get("A2") is None
@@ -61,8 +51,8 @@ def test_replace_all_rebuilds_from_scratch_dropping_previous_articles(tmp_path: 
 def test_all_returns_every_stored_article(tmp_path: Path) -> None:
     store = _store(tmp_path)
     articles = [
-        to_article(raw_row(ref="A1", texte="Premier texte.")),
-        to_article(raw_row(ref="A2", texte="Second texte.")),
+        factories.article(ref="A1", texte="Premier texte."),
+        factories.article(ref="A2", texte="Second texte."),
     ]
     store.replace_all(articles)
 
@@ -77,8 +67,9 @@ def test_all_returns_an_empty_list_when_the_store_is_empty(tmp_path: Path) -> No
 
 def test_reopening_the_same_path_sees_previously_persisted_articles(tmp_path: Path) -> None:
     path = str(tmp_path / "articles.db")
-    ArticleStore(path).replace_all([to_article(raw_row(ref="A1", texte="Persisted text."))])
+    ArticleStore(path).replace_all([factories.article(ref="A1", texte="Persisted text.")])
 
     reopened = ArticleStore(path)
 
-    assert reopened.get("A1")["texte"] == "Persisted text."
+    article = reopened.get("A1")
+    assert article is not None and article["texte"] == "Persisted text."

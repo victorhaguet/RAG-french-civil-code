@@ -1,9 +1,15 @@
 """Tests for the BM25 Keyword Index, exercised against real rank_bm25 and nltk."""
 
+import socket
+from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
+
+import nltk
+import pytest
 
 from src.ingestion.dataset import to_article
-from src.retrieval.keyword_index import KeywordIndex, tokenize
+from src.retrieval.keyword_index import _NLTK_DOWNLOAD_TIMEOUT, KeywordIndex, _get_stopwords, tokenize
 from src.storage.article_store import ArticleStore
 from tests.factories import raw_row
 
@@ -18,7 +24,7 @@ _DISTRACTORS = [
 ]
 
 
-def _store(tmp_path: Path, *rows: dict) -> ArticleStore:
+def _store(tmp_path: Path, *rows: dict[str, Any]) -> ArticleStore:
     store = ArticleStore(str(tmp_path / "articles.db"))
     store.replace_all(to_article(row) for row in rows)
     return store
@@ -101,3 +107,42 @@ def test_search_on_an_empty_store_returns_no_refs(tmp_path: Path) -> None:
     index = KeywordIndex(store)
 
     assert index.search("tutelle", k=5) == []
+
+
+@pytest.fixture
+def _uncached_stopwords() -> Iterator[None]:
+    previous_timeout = socket.getdefaulttimeout()
+    _get_stopwords.cache_clear()
+    yield
+    _get_stopwords.cache_clear()
+    socket.setdefaulttimeout(previous_timeout)
+
+
+@pytest.mark.usefixtures("_uncached_stopwords")
+def test_stopwords_download_is_bounded_by_a_socket_timeout_then_restores_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    timeouts_during_download: list[float | None] = []
+
+    def _missing(resource: str) -> None:
+        raise LookupError(resource)
+
+    def _download(*_args: object, **_kwargs: object) -> None:
+        timeouts_during_download.append(socket.getdefaulttimeout())
+
+    monkeypatch.setattr(nltk.data, "find", _missing)
+    monkeypatch.setattr(nltk, "download", _download)
+    socket.setdefaulttimeout(None)
+
+    _get_stopwords()
+
+    assert timeouts_during_download == [_NLTK_DOWNLOAD_TIMEOUT]
+    assert socket.getdefaulttimeout() is None
+
+
+@pytest.mark.usefixtures("_uncached_stopwords")
+def test_stopwords_are_loaded_once_per_process(monkeypatch: pytest.MonkeyPatch) -> None:
+    first = _get_stopwords()
+    monkeypatch.setattr(nltk.data, "find", lambda _resource: pytest.fail("reloaded"))
+
+    assert _get_stopwords() is first
