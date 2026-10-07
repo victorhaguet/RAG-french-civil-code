@@ -33,3 +33,26 @@ jobs:
 
       - name: Run mypy
         run: uv run mypy src scripts tests
+
+  pylint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      - name: Install dependencies
+        # Same as the mypy job: --extra cpu for torch's CPU-only build,
+        # --group eval so pylint can import ragas (src/evaluation/judge.py)
+        # instead of reporting import-error.
+        run: uv sync --locked --extra cpu --group eval
+
+      - name: Run pylint
+        # No --fail-under: pylint exits non-zero on any finding.
+        run: uv run pylint src scripts tests
