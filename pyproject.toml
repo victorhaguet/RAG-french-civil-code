@@ -81,6 +81,9 @@ name = "pytorch-cu124"
 url = "https://download.pytorch.org/whl/cu124"
 explicit = true
 
+[tool.mypy]
+strict = true
+
 [[tool.mypy.overrides]]
 module = ["datasets", "nltk", "nltk.*", "rank_bm25"]
 ignore_missing_imports = true
