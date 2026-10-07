@@ -1,8 +1,8 @@
 from pathlib import Path
 
+from src.ingestion.dataset import to_article
 from src.storage.article_store import ArticleStore
 from tests.factories import raw_row
-from src.ingestion.dataset import to_article
 
 
 def _store(tmp_path: Path) -> ArticleStore:
