@@ -71,3 +71,13 @@ def test_embed_query_returns_a_single_vector() -> None:
 
     assert isinstance(result, list)
     assert all(isinstance(x, float) for x in result)
+
+
+def test_documents_and_queries_are_embedded_normalized() -> None:
+    model = FakeModel()
+    embeddings = MultilingualE5Embeddings(model=model, model_name=FIXED_PREFIX_MODEL)
+
+    embeddings.embed_documents(["Les lois s'appliquent."])
+    embeddings.embed_query("Quand une loi entre-t-elle en vigueur ?")
+
+    assert model.normalize_embeddings_calls == [True, True]

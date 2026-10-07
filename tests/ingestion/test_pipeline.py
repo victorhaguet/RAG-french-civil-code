@@ -62,33 +62,22 @@ def test_only_vigueur_articles_are_stored(tmp_path: Path) -> None:
 
 
 def test_short_article_stored_as_a_single_chunk_with_full_metadata(tmp_path: Path) -> None:
-    rows = [
-        _raw_row(
-            ref="A1",
-            texte="Short text.",
-            dateDebut=1086048000000,
-            dateFin=32472144000000,
-            etat="VIGUEUR",
-            version_article="2.0",
-            origine="LEGI",
-            sectionParentTitre="Titre préliminaire",
-        )
-    ]
+    metadata = {
+        "dateDebut": 3,
+        "dateFin": 4,
+        "etat": "VIGUEUR",
+        "version_article": "3.0",
+        "origine": "JORF",
+        "sectionParentTitre": "Titre II",
+    }
+    rows = [_raw_row(ref="A1", texte="Short text.", **metadata)]
 
     store = _run(tmp_path, rows)
 
     stored = store.get(include=["metadatas", "documents"])
     assert stored["ids"] == ["A1#0"]
     assert stored["documents"] == ["Short text."]
-    assert stored["metadatas"][0] == {
-        "ref": "A1",
-        "dateDebut": 1086048000000,
-        "dateFin": 32472144000000,
-        "etat": "VIGUEUR",
-        "version_article": "2.0",
-        "origine": "LEGI",
-        "sectionParentTitre": "Titre préliminaire",
-    }
+    assert stored["metadatas"][0] == {"ref": "A1", **metadata}
 
 
 def test_long_article_split_into_multiple_sequential_chunks(tmp_path: Path) -> None:

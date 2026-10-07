@@ -1,6 +1,5 @@
-from src.ingestion.dataset import to_article
 from src.retrieval.reranker import Reranker
-from tests.factories import raw_row
+from tests.factories import article
 from tests.fakes import FakeCrossEncoder
 
 
@@ -8,8 +7,8 @@ def test_rerank_scores_the_question_and_each_articles_texte_as_a_pair() -> None:
     model = FakeCrossEncoder()
     reranker = Reranker(model=model)
     articles = [
-        to_article(raw_row(ref="A1", texte="Un texte.")),
-        to_article(raw_row(ref="A2", texte="Un autre texte plus long.")),
+        article(ref="A1", texte="Un texte."),
+        article(ref="A2", texte="Un autre texte plus long."),
     ]
 
     reranker.rerank("Quelle est la loi ?", articles)
@@ -28,8 +27,8 @@ def test_rerank_reorders_articles_by_descending_cross_encoder_score() -> None:
     # though it comes second in the incoming (fused) order.
     model = FakeCrossEncoder()
     reranker = Reranker(model=model)
-    short = to_article(raw_row(ref="SHORT", texte="Bref."))
-    long = to_article(raw_row(ref="LONG", texte="Un texte nettement plus long que l'autre."))
+    short = article(ref="SHORT", texte="Bref.")
+    long = article(ref="LONG", texte="Un texte nettement plus long que l'autre.")
 
     result = reranker.rerank("Question ?", [short, long])
 
@@ -43,4 +42,4 @@ def test_rerank_returns_an_empty_list_for_no_candidates() -> None:
     result = reranker.rerank("Question ?", [])
 
     assert result == []
-    assert model.predict_calls == []
+    assert not model.predict_calls

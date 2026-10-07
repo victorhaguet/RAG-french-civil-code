@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from src.ingestion.dataset import Article, to_article
+
 
 def raw_row(**overrides: object) -> dict[str, Any]:
     """A raw Code civil dataset row, shaped like a real HuggingFace row."""
@@ -27,3 +29,8 @@ def raw_row(**overrides: object) -> dict[str, Any]:
     }
     row.update(overrides)
     return row
+
+
+def article(**overrides: object) -> Article:
+    """An Article, as ingestion keeps it from a `raw_row` with these overrides."""
+    return to_article(raw_row(**overrides))

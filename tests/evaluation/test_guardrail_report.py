@@ -2,22 +2,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from src.api.app import app
-from src.api.dependencies import (
-    get_article_store,
-    get_bm25_index,
-    get_chat_model,
-    get_reranker,
-    get_store,
-)
 from src.evaluation.guardrail_report import evaluate_guardrail_questions
-from src.ingestion.pipeline import run_ingestion
-from src.retrieval.embeddings import FIXED_PREFIX_MODEL, MultilingualE5Embeddings
-from src.retrieval.keyword_index import KeywordIndex
-from src.retrieval.reranker import Reranker
-from src.storage.article_store import ArticleStore
+from tests.app_wiring import client_for, ingest
 from tests.factories import raw_row
-from tests.fakes import FakeChatModel, FakeModel, PassthroughCrossEncoder
+from tests.fakes import FakeChatModel
 
 _OUT_OF_SCOPE_ANSWER = (
     "Je ne peux pas répondre à cette question à partir des informations "
@@ -26,21 +14,7 @@ _OUT_OF_SCOPE_ANSWER = (
 
 
 def _client(tmp_path: Path, chat_model: FakeChatModel) -> TestClient:
-    model = FakeModel()
-    chroma_store = run_ingestion(
-        raw_rows=[raw_row(ref="A1", etat="VIGUEUR")],
-        embeddings=MultilingualE5Embeddings(model=model, model_name=FIXED_PREFIX_MODEL),
-        persist_directory=str(tmp_path / "chroma"),
-        collection_name="test_collection",
-        sqlite_path=str(tmp_path / "articles.db"),
-    )
-    article_store = ArticleStore(str(tmp_path / "articles.db"))
-    app.dependency_overrides[get_store] = lambda: chroma_store
-    app.dependency_overrides[get_article_store] = lambda: article_store
-    app.dependency_overrides[get_chat_model] = lambda: chat_model
-    app.dependency_overrides[get_bm25_index] = lambda: KeywordIndex(article_store)
-    app.dependency_overrides[get_reranker] = lambda: Reranker(model=PassthroughCrossEncoder())
-    return TestClient(app)
+    return client_for(*ingest(tmp_path, [raw_row(ref="A1", etat="VIGUEUR")]), chat_model)
 
 
 def test_reports_no_data_for_an_empty_question_set(tmp_path: Path) -> None:
