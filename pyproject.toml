@@ -34,6 +34,7 @@ cu124 = ["torch>=2.6.0"]
 dev = [
     "httpx>=0.28.1",
     "mypy>=2.3.1",
+    "pylint>=4.1.2",
     "pytest>=9.1.1",
     "pytest-cov>=7.1.0",
 ]
@@ -87,3 +88,31 @@ strict = true
 [[tool.mypy.overrides]]
 module = ["datasets", "nltk", "nltk.*", "rank_bm25"]
 ignore_missing_imports = true
+
+# Every rule not listed here keeps pylint's defaults, thresholds included.
+# Exceptions live only here: no inline `# pylint: disable` comments.
+[tool.pylint.main]
+# lingua is a compiled extension; without this pylint can't introspect it and
+# reports a false no-name-in-module.
+extension-pkg-allow-list = ["lingua"]
+
+[tool.pylint."messages control"]
+disable = [
+    # Style: docstrings aren't required on every test function and small helper.
+    "missing-module-docstring",
+    "missing-class-docstring",
+    "missing-function-docstring",
+    # Style: the project uses no formatter, and docstrings/test data run long.
+    "line-too-long",
+    # Style: fakes, schemas and data holders legitimately have few methods.
+    "too-few-public-methods",
+    # Project convention: heavy libraries (nltk, sentence-transformers, ragas,
+    # langchain-openai, lingua, datasets) are imported lazily.
+    "import-outside-toplevel",
+    # False positives on the `[x] = some_list` idiom in tests, which asserts
+    # exactly one item; Python raises at runtime if the count is wrong anyway.
+    "unbalanced-tuple-unpacking",
+    # The RAGAS judge step catches every exception so that one judge failure
+    # doesn't abort a whole Golden Question run.
+    "broad-exception-caught",
+]
