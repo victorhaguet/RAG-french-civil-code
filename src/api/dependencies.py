@@ -1,15 +1,19 @@
-"""FastAPI dependencies for the query API: the vectorstore and chat model.
+"""FastAPI dependencies for the query API.
 
-Both are cached singletons in production, and are the seams tests override
-via `app.dependency_overrides` to inject a pre-populated test Chroma
-collection and a fake chat model.
+Each component (vectorstore, chat model, Article store, Keyword Index,
+Reranker) has its own provider: a cached singleton in production, and the
+seam tests override via `app.dependency_overrides` to inject a pre-populated
+test Chroma collection, a fake chat model, and so on. `get_query_pipeline`
+bundles them for `/query`.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
+from fastapi import Depends
 from langchain_chroma import Chroma
 
 from src import config
@@ -74,3 +78,35 @@ def get_chat_model() -> Any:
     be named here without eagerly importing it.
     """
     return build_chat_model()
+
+
+@dataclass(frozen=True)
+class QueryPipeline:
+    """Everything `/query` needs to answer a question, bundled as one dependency."""
+
+    vector_store: Chroma
+    chat_model: Any
+    article_store: ArticleStore
+    keyword_index: KeywordIndex
+    reranker: Reranker
+
+
+def get_query_pipeline(
+    vector_store: Chroma = Depends(get_store),
+    chat_model: Any = Depends(get_chat_model),
+    article_store: ArticleStore = Depends(get_article_store),
+    keyword_index: KeywordIndex = Depends(get_bm25_index),
+    reranker: Reranker = Depends(get_reranker),
+) -> QueryPipeline:
+    """Bundle `/query`'s dependencies, each resolved through its own provider.
+
+    Not cached: resolving through the individual providers keeps each one
+    overridable on its own via `app.dependency_overrides`.
+    """
+    return QueryPipeline(
+        vector_store=vector_store,
+        chat_model=chat_model,
+        article_store=article_store,
+        keyword_index=keyword_index,
+        reranker=reranker,
+    )
