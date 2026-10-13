@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "code-civil": {
+      "type": "stdio",
+      "command": "uv",
+      "args": ["run", "python", "-m", "src.code_civil_mcp"]
+    }
+  }
+}
