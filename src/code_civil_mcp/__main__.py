@@ -6,13 +6,13 @@ configures logging to stderr when it is built.
 
 from __future__ import annotations
 
-from src.api.dependencies import build_query_pipeline
+from src.api.dependencies import build_query_pipeline, get_article_store
 from src.code_civil_mcp.server import create_server
 
 
 def main() -> None:
     """Start the MCP server on stdio, with the production (cached) providers."""
-    create_server(build_query_pipeline).run("stdio")
+    create_server(build_query_pipeline, get_article_store).run("stdio")
 
 
 if __name__ == "__main__":
