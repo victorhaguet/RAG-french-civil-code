@@ -99,3 +99,18 @@ def get_query_pipeline(
         keyword_index=keyword_index,
         reranker=reranker,
     )
+
+
+def build_query_pipeline() -> QueryPipeline:
+    """Bundle the cached providers outside FastAPI's dependency injection.
+
+    Used by the MCP server, which resolves it on each tool call: the first
+    call loads every model, and the providers' caches keep them warm after.
+    """
+    return get_query_pipeline(
+        vector_store=get_store(),
+        chat_model=get_chat_model(),
+        article_store=get_article_store(),
+        keyword_index=get_bm25_index(),
+        reranker=get_reranker(),
+    )
