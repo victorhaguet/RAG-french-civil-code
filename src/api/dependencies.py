@@ -9,7 +9,6 @@ bundles them for `/query`.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from functools import lru_cache
 from typing import Any
 
@@ -21,6 +20,7 @@ from src.retrieval.embeddings import MultilingualE5Embeddings
 from src.retrieval.keyword_index import KeywordIndex
 from src.retrieval.reranker import Reranker
 from src.generation.chat import build_chat_model
+from src.pipeline import QueryPipeline
 from src.storage.article_store import ArticleStore
 
 
@@ -80,17 +80,6 @@ def get_chat_model() -> Any:
     return build_chat_model()
 
 
-@dataclass(frozen=True)
-class QueryPipeline:
-    """Everything `/query` needs to answer a question, bundled as one dependency."""
-
-    vector_store: Chroma
-    chat_model: Any
-    article_store: ArticleStore
-    keyword_index: KeywordIndex
-    reranker: Reranker
-
-
 def get_query_pipeline(
     vector_store: Chroma = Depends(get_store),
     chat_model: Any = Depends(get_chat_model),
@@ -109,4 +98,19 @@ def get_query_pipeline(
         article_store=article_store,
         keyword_index=keyword_index,
         reranker=reranker,
+    )
+
+
+def build_query_pipeline() -> QueryPipeline:
+    """Bundle the cached providers outside FastAPI's dependency injection.
+
+    Used by the MCP server, which resolves it on each tool call: the first
+    call loads every model, and the providers' caches keep them warm after.
+    """
+    return get_query_pipeline(
+        vector_store=get_store(),
+        chat_model=get_chat_model(),
+        article_store=get_article_store(),
+        keyword_index=get_bm25_index(),
+        reranker=get_reranker(),
     )

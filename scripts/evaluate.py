@@ -51,7 +51,7 @@ RESULTS_REPORT_PATH = "eval/results.md"
 
 def main() -> None:
     # INFO on the root logger so every module's logger.info(...) -- this
-    # script's own progress, and the full /query pipeline's (src.api.app,
+    # script's own progress, and the full /query pipeline's (src.pipeline,
     # src.retrieval.keyword_index, ...) -- surfaces here, with a timestamp:
     # the key piece of information to diagnose where and how long a run is
     # stuck, not just that it is.

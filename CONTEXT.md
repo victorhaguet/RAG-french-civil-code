@@ -69,6 +69,14 @@ states plainly that the question can't be answered from retrieval, reminds the u
 is Code civil only (as of `DATASET_AS_OF`), and invites rephrasing. Cites no Articles.
 _Avoid_: Fallback, no-answer (too vague — doesn't convey that persona is dropped)
 
+**MCP Server**:
+The interface that exposes the query pipeline to MCP hosts (e.g. Claude Code) as two tools:
+`ask_code_civil`, which returns a Grounded Answer or Out-of-Scope Answer together with the full
+text of its Retrieved Articles, and `get_article`, which returns one Article by `ref`. It runs the
+same in-process pipeline as `/query`, over stdio (a subprocess started by the host) or over
+Streamable HTTP (mounted in the API's app at `/mcp`, sharing its loaded models).
+_Avoid_: MCP (the protocol, not this server), plugin, agent, tool server
+
 ## Evaluation
 
 **Golden Question**:

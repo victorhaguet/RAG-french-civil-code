@@ -13,6 +13,7 @@ dependencies = [
     "langchain-openai>=1.6.0",
     "langchain-text-splitters>=1.1.2",
     "lingua-language-detector>=2.2.0",
+    "mcp>=2.3.0",
     "nltk>=3.10.3",
     "python-dotenv>=1.2.3",
     "rank-bm25>=0.2.2",

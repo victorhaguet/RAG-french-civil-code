@@ -5,8 +5,9 @@ from fastapi.testclient import TestClient
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
-from src.api.app import NON_FRENCH_REFUSAL, _ranked_refs_from_chunks, _resolve_articles, app
+from src.api.app import app
 from src.ingestion.dataset import to_article
+from src.pipeline import NON_FRENCH_REFUSAL, _ranked_refs_from_chunks, _resolve_articles
 from src.retrieval.reranker import Reranker
 from src.storage.article_store import ArticleStore
 from tests.app_wiring import client_for, ingest

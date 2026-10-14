@@ -1,76 +1,38 @@
-"""FastAPI application: query the Code civil corpus and get a grounded answer."""
+"""FastAPI application: query the Code civil corpus and get a grounded answer.
+
+The same app serves the MCP server over Streamable HTTP at `/mcp`, built with
+the same cached providers as the REST routes, so both share one set of loaded
+models.
+"""
 
 from __future__ import annotations
 
-import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, HTTPException
-from langchain_core.documents import Document
+from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from mcp.server.transport_security import TransportSecuritySettings
 
-from src import config
-from src.api.dependencies import QueryPipeline, get_article_store, get_query_pipeline
+from src.api.dependencies import (
+    build_query_pipeline,
+    get_article_store,
+    get_query_pipeline,
+)
 from src.api.schemas import ArticleOut, QueryRequest, QueryResponse
-from src.generation.prompt import render_prompt
+from src.code_civil_mcp.server import create_server
 from src.ingestion.dataset import Article
-from src.retrieval.fusion import reciprocal_rank_fusion
-from src.retrieval.language import detect_query_language
+from src.pipeline import QueryPipeline, answer_query
 from src.storage.article_store import ArticleStore
 
-app = FastAPI()
-
-logger = logging.getLogger(__name__)
-
-# Fixed, English-only, and deliberately not generated: the corpus and the
-# whole pipeline are French-only, so a non-French question is redirected
-# before any retrieval, embedding or LLM call.
-NON_FRENCH_REFUSAL = (
-    "This tool only answers questions in French, about the Code civil. "
-    "Please rephrase your question in French."
+# DNS-rebinding protection: a web page can't drive the unauthenticated local
+# server from a browser, since only localhost Host/Origin values get through.
+MCP_TRANSPORT_SECURITY = TransportSecuritySettings(
+    enable_dns_rebinding_protection=True,
+    allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
+    allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
 )
 
-
-def _ranked_refs_from_chunks(chunks: list[Document]) -> list[str]:
-    """Dedupe retrieved Chunks to their Article refs, in first-seen (highest-relevance) order.
-
-    Several Chunks can match the same Article; each ref is kept once.
-
-    Args:
-        chunks (list[Document]): retrieved chunks
-
-    Returns:
-        list[str]: Article refs obtained from the retrieved chunks (no duplication)
-    """
-    # Use a set for checks to reduce complexity (instead of using the list refs)
-    seen_refs: set[str] = set()
-    refs: list[str] = []
-    for chunk in chunks:
-        ref = chunk.metadata["ref"]
-        if ref in seen_refs:
-            continue
-        seen_refs.add(ref)
-        refs.append(ref)
-    return refs
-
-
-def _resolve_articles(refs: list[str], article_store: ArticleStore) -> list[Article]:
-    """Resolve Article refs to their full records, preserving order.
-
-    Args:
-        refs (list[str]): Article refs retrieved
-        article_store (ArticleStore): store containing all the articles
-
-    Returns:
-        list[Article]: Articles retrieved
-    """
-    articles: list[Article] = []
-    for ref in refs:
-        article = article_store.get(ref)
-        # Every ref reaching here came from either the vectorstore or the
-        # Keyword Index, both sourced from the same ingestion run that
-        # populated the Article store, so it always resolves.
-        assert article is not None
-        articles.append(article)
-    return articles
+router = APIRouter()
 
 
 def _to_article_out(article: Article) -> ArticleOut:
@@ -85,13 +47,13 @@ def _to_article_out(article: Article) -> ArticleOut:
     return ArticleOut(ref=article["ref"], sectionParentTitre=article["sectionParentTitre"])
 
 
-@app.get("/health")
+@router.get("/health")
 def health() -> dict[str, str]:
     """Liveness check."""
     return {"status": "ok"}
 
 
-@app.post("/query", response_model=QueryResponse)
+@router.post("/query", response_model=QueryResponse)
 def query(
     request: QueryRequest,
     pipeline: QueryPipeline = Depends(get_query_pipeline),
@@ -106,43 +68,14 @@ def query(
     Returns:
         QueryResponse: the generated answer and the Retrieved Articles it cites
     """
-    logger.info("Query: %r", request.question)
-    if detect_query_language(request.question) != "fr":
-        logger.info("Non-French query refused before retrieval")
-        return QueryResponse(answer=NON_FRENCH_REFUSAL, articles=[])
-
-    fetch_k = max(config.FETCH_K_MULTIPLIER * request.top_k, config.MIN_FETCH_K)
-
-    chunks = pipeline.vector_store.similarity_search(request.question, k=fetch_k)
-    vector_refs = _ranked_refs_from_chunks(chunks)
-    logger.info("Vector search: %d chunk(s) -> %d article(s)", len(chunks), len(vector_refs))
-
-    keyword_refs = pipeline.keyword_index.search(request.question, k=fetch_k)
-    logger.info("BM25 search: %d article(s)", len(keyword_refs))
-
-    candidate_refs = reciprocal_rank_fusion(
-        [keyword_refs, vector_refs],
-        weights=[config.RRF_WEIGHT_BM25, config.RRF_WEIGHT_VECTOR],
-        k=config.RRF_K,
-    )
-    logger.info("Fused to %d candidate(s)", len(candidate_refs))
-
-    candidate_articles = _resolve_articles(candidate_refs, pipeline.article_store)
-    articles = pipeline.reranker.rerank(request.question, candidate_articles)[: request.top_k]
-    logger.info("Reranked to %d article(s)", len(articles))
-
-    prompt = render_prompt(question=request.question, articles=articles)
-    logger.info("Calling chat model...")
-    answer = pipeline.chat_model.invoke(prompt).content
-    logger.info("Chat model responded (%d chars)", len(answer))
-
+    result = answer_query(request.question, request.top_k, pipeline)
     return QueryResponse(
-        answer=answer,
-        articles=[_to_article_out(article) for article in articles],
+        answer=result.answer,
+        articles=[_to_article_out(article) for article in result.articles],
     )
 
 
-@app.get("/articles/{ref}", response_model=Article)
+@router.get("/articles/{ref}", response_model=Article)
 def get_article(
     ref: str, article_store: ArticleStore = Depends(get_article_store)
 ) -> Article:
@@ -151,3 +84,34 @@ def get_article(
     if article is None:
         raise HTTPException(status_code=404, detail="Article not found.")
     return article
+
+
+def create_app() -> FastAPI:
+    """Build the app: the REST routes, plus the MCP server mounted at `/mcp`.
+
+    A factory because the MCP session manager runs once per instance: each
+    app (and so each lifespan) needs its own.
+
+    Returns:
+        FastAPI: the app, ready to serve
+    """
+    mcp_server = create_server(build_query_pipeline, get_article_store)
+    # Mounted at the root, the MCP app's own `/mcp` route is served at `/mcp`
+    # exactly (a mount at `/mcp` would only match `/mcp/...`). Its router only
+    # handles `/mcp`, and the REST routes are matched before it.
+    mcp_app = mcp_server.streamable_http_app(transport_security=MCP_TRANSPORT_SECURITY)
+
+    @asynccontextmanager
+    async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+        # A mounted app's lifespan never runs, so the session manager is
+        # started here, as the SDK requires.
+        async with mcp_server.session_manager.run():
+            yield
+
+    fastapi_app = FastAPI(lifespan=lifespan)
+    fastapi_app.include_router(router)
+    fastapi_app.mount("/", mcp_app)
+    return fastapi_app
+
+
+app = create_app()
