@@ -54,8 +54,14 @@ jobs:
     runs-on: ubuntu-latest
     # Secrets/variables live in this GitHub Environment (Settings >
     # Environments), not at the repo level -- a job only sees an
-    # environment's secrets/vars once it opts in like this.
-    environment: ragas_evaluation
+    # environment's secrets/vars once it opts in like this. `deployment:
+    # false`: an eval run isn't a deployment, so it shouldn't create one --
+    # otherwise every run left unapproved (e.g. on a PR that touches src/**
+    # without changing the pipeline) shows up as a failed deployment. The
+    # environment's required reviewers still apply.
+    environment:
+      name: ragas_evaluation
+      deployment: false
     # 34 Golden Questions x ~45s each (dominated by 2 sequential real judge
     # LLM calls per question, sometimes retried) is already ~25-27 minutes on
     # its own -- see the per-step timing logging now emits. 30 was never
