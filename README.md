@@ -129,6 +129,73 @@ curl http://127.0.0.1:8000/articles/{ref}
 
 Interactive API docs (Swagger UI) are available at `http://127.0.0.1:8000/docs`.
 
+## Use it from Claude Code
+
+The [Model Context Protocol](https://modelcontextprotocol.io) (MCP) is an open protocol that
+lets an AI application (the *host*, here Claude Code) call tools exposed by an external
+*server*. The host discovers each tool's name, description and input schema, decides on its own
+when a tool is relevant, calls it, and reads the structured result. This repo ships an MCP server
+that exposes the same query pipeline as `/query`, so Claude can answer a French civil-law
+question from the Code civil while you work, without leaving the terminal.
+
+The server exposes two tools:
+
+- **`ask_code_civil(question, top_k)`**: runs the full pipeline (Query Language gate, Hybrid
+  Retrieval, reranking, generation) and returns the Grounded Answer (or Out-of-Scope Answer)
+  together with the Retrieved Articles it was grounded in, each with its `ref`,
+  `sectionParentTitre` and **full text**, so Claude can check the answer against the sources.
+  `question` must be in French: the tool description tells Claude to translate it first, and a
+  question detected as English gets the same fixed refusal as `/query`. `top_k` is optional
+  (default `DEFAULT_TOP_K`, must be > 0).
+- **`get_article(ref)`**: returns one full Article by its `ref`, so Claude can follow a
+  reference made in an answer to an Article that wasn't retrieved. An unknown `ref`
+  returns a tool error ("Article not found."), like the REST 404.
+
+It runs over two transports.
+
+### stdio (local)
+
+Claude Code starts the server itself, as a subprocess, with `uv run python -m src.code_civil_mcp`.
+The repo commits a [`.mcp.json`](.mcp.json) declaring it, so opening the repo in Claude Code
+offers the `code-civil` server automatically (approve it when prompted). To register it by hand
+instead, from the repo root:
+
+```bash
+claude mcp add code-civil -- uv run python -m src.code_civil_mcp
+```
+
+Prerequisites, since the subprocess runs on your machine with your local data:
+
+- the dependencies are installed (`uv sync`, see "Setup") and the ingestion has run locally
+  (`uv run scripts/ingest.py`, see "Running it"): the server reads `data/` and never ingests;
+- `OPENAI_API_KEY` is set in `.env` at the repo root, which the server loads on startup.
+
+### HTTP (Docker)
+
+The same server is mounted inside the FastAPI app at `/mcp`, over Streamable HTTP, so the
+container that serves the REST API serves MCP too. Start it, then register it with Claude Code:
+
+```bash
+docker compose up --build
+claude mcp add --transport http code-civil-http http://127.0.0.1:8000/mcp
+```
+
+Add `--scope user` to make it available in every project rather than only the current one. The
+endpoint is unauthenticated, so it is published on localhost only, and it accepts only
+localhost `Host`/`Origin` headers, so a web page can't drive it from your browser (DNS-rebinding
+protection). `uv run uvicorn src.api.app:app` serves `/mcp` the same way, without Docker.
+
+### Things to know
+
+- **The first question is slow.** Starting the server loads no model: the embedding model, the
+  Reranker and the Keyword Index load on the first `ask_code_civil` call, so model loading never
+  counts against Claude Code's startup timeout, and stay loaded afterwards. With stdio, that
+  happens once per Claude Code session, since each session starts its own subprocess. With
+  HTTP, it happens once per container lifetime, and the REST API and MCP share the same loaded
+  models.
+- **Every `ask_code_civil` call spends OpenAI tokens**, exactly like `/query`. `get_article` is
+  a database lookup and calls no model.
+
 ## Evaluation
 
 `scripts/evaluate.py` scores the real pipeline, driven exclusively through `/query`, against
