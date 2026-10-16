@@ -50,10 +50,12 @@ def client_for(
     article_store: ArticleStore,
     chat_model: FakeChatModel,
     reranker: Reranker | None = None,
+    token: str | None = None,
 ) -> TestClient:
     """A client for the app, with every `/query` dependency overridden.
 
     The reranker defaults to a passthrough, so retrieval order is unchanged.
+    `token`, when given, is sent as the bearer Access Token on every request.
     `tests/conftest.py` clears the overrides after each test.
     """
     app.dependency_overrides[get_store] = lambda: store
@@ -63,4 +65,5 @@ def client_for(
     app.dependency_overrides[get_reranker] = lambda: reranker or Reranker(
         model=PassthroughCrossEncoder()
     )
-    return TestClient(app)
+    headers = {"Authorization": f"Bearer {token}"} if token else None
+    return TestClient(app, headers=headers)
