@@ -17,6 +17,7 @@ from src.api.dependencies import (
     build_query_pipeline,
     get_article_store,
     get_query_pipeline,
+    require_access_token,
 )
 from src.api.schemas import ArticleOut, QueryRequest, QueryResponse
 from src.code_civil_mcp.server import create_server
@@ -53,7 +54,9 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.post("/query", response_model=QueryResponse)
+@router.post(
+    "/query", response_model=QueryResponse, dependencies=[Depends(require_access_token)]
+)
 def query(
     request: QueryRequest,
     pipeline: QueryPipeline = Depends(get_query_pipeline),
@@ -75,7 +78,9 @@ def query(
     )
 
 
-@router.get("/articles/{ref}", response_model=Article)
+@router.get(
+    "/articles/{ref}", response_model=Article, dependencies=[Depends(require_access_token)]
+)
 def get_article(
     ref: str, article_store: ArticleStore = Depends(get_article_store)
 ) -> Article:
