@@ -50,8 +50,9 @@ class FixedKeyProvider:
 class JwksKeyProvider:
     """The authorization server's published keys, picked by the token's `kid`.
 
-    `PyJWKClient` caches the key set, and fetches it again on an unknown `kid`
-    (e.g. after a key rotation).
+    `PyJWKClient` caches the key set for 5 minutes. On an unknown `kid` (e.g.
+    after a key rotation) it fetches the set again, but at most once every
+    30 seconds, so tokens with made-up `kid`s can't flood Keycloak.
     """
 
     def __init__(self, jwks_url: str) -> None:

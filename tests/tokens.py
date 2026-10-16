@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import time
 from typing import Any
 
@@ -17,10 +18,15 @@ def generate_key_pair() -> RSAPrivateKey:
 
 
 class TokenFactory:
-    """Signs JWTs with `private_key`, defaulting to claims the verifier accepts."""
+    """Signs JWTs with `private_key`, defaulting to claims the verifier accepts.
 
-    def __init__(self, private_key: RSAPrivateKey) -> None:
+    `kid`, when given, goes in each token's header and in the public `jwk()`,
+    as Keycloak does, so a JWKS client can pick the key to verify with.
+    """
+
+    def __init__(self, private_key: RSAPrivateKey, kid: str | None = None) -> None:
         self.private_key = private_key
+        self.kid = kid
 
     @property
     def public_key(self) -> RSAPublicKey:
@@ -40,4 +46,13 @@ class TokenFactory:
         return {name: value for name, value in claims.items() if value is not None}
 
     def sign(self, **overrides: Any) -> str:
-        return jwt.encode(self.claims(**overrides), self.private_key, algorithm="RS256")
+        headers = {"kid": self.kid} if self.kid else None
+        return jwt.encode(
+            self.claims(**overrides), self.private_key, algorithm="RS256", headers=headers
+        )
+
+    def jwk(self) -> dict[str, Any]:
+        """The public key as a JWK, as published in a JWKS."""
+        jwk: dict[str, Any] = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(self.public_key))
+        jwk.update(kid=self.kid, alg="RS256", use="sig")
+        return jwk
