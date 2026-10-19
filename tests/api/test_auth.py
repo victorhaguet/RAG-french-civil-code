@@ -107,3 +107,20 @@ def test_health_needs_no_token() -> None:
     response = TestClient(app).get("/health")
 
     assert response.status_code == 200
+
+
+def test_a_valid_token_without_the_query_role_gets_a_403_on_query(
+    client: TestClient, tokens: TokenFactory
+) -> None:
+    response = _query(client, _bearer(tokens.sign(realm_access={"roles": ["other"]})))
+
+    assert response.status_code == 403
+    assert "code-civil-query" in response.json()["detail"]
+
+
+def test_a_valid_token_without_the_query_role_still_gets_the_article(
+    client: TestClient, tokens: TokenFactory
+) -> None:
+    response = _article(client, _bearer(tokens.sign(realm_access={"roles": ["other"]})))
+
+    assert response.status_code == 200
