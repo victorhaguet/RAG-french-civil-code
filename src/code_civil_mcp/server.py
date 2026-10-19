@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Annotated
 
+from mcp.server.auth.provider import TokenVerifier
+from mcp.server.auth.settings import AuthSettings
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import BaseModel, Field
@@ -56,6 +58,8 @@ class AskCodeCivilResult(BaseModel):
 def create_server(
     query_pipeline: Callable[[], QueryPipeline],
     article_store: Callable[[], ArticleStore],
+    token_verifier: TokenVerifier | None = None,
+    auth: AuthSettings | None = None,
 ) -> MCPServer:
     """Build the MCP server.
 
@@ -64,11 +68,16 @@ def create_server(
             components a query runs through, resolved on each tool call
         article_store (Callable[[], ArticleStore]): provider of the Article
             store `get_article` reads from, resolved on each tool call
+        token_verifier (TokenVerifier | None, optional): checks the bearer
+            token of every HTTP request, given together with `auth`. Defaults
+            to None: no authentication, as over stdio.
+        auth (AuthSettings | None, optional): the resource-server settings
+            `token_verifier` is used with. Defaults to None.
 
     Returns:
         MCPServer: the server, ready to run on any transport
     """
-    server = MCPServer(SERVER_NAME)
+    server = MCPServer(SERVER_NAME, token_verifier=token_verifier, auth=auth)
 
     @server.tool(description=ASK_CODE_CIVIL_DESCRIPTION)
     def ask_code_civil(
