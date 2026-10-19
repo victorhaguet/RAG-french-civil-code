@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import json
 import time
+from collections.abc import Callable
 from typing import Any
 
 import jwt
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey, RSAPublicKey
 
@@ -56,3 +61,44 @@ class TokenFactory:
         jwk: dict[str, Any] = json.loads(jwt.algorithms.RSAAlgorithm.to_jwk(self.public_key))
         jwk.update(kid=self.kid, alg="RS256", use="sig")
         return jwk
+
+
+def _hs256_token(tokens: TokenFactory) -> str:
+    """Algorithm confusion: HMAC-signed with the *public* key as the shared secret.
+
+    Built by hand, since PyJWT itself refuses to use a PEM key as an HMAC secret.
+    """
+    public_pem = tokens.public_key.public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    )
+
+    def segment(data: bytes) -> bytes:
+        return base64.urlsafe_b64encode(data).rstrip(b"=")
+
+    signing_input = (
+        segment(json.dumps({"alg": "HS256", "typ": "JWT"}).encode())
+        + b"."
+        + segment(json.dumps(tokens.claims()).encode())
+    )
+    signature = hmac.new(public_pem, signing_input, hashlib.sha256).digest()
+    return (signing_input + b"." + segment(signature)).decode()
+
+
+def _unsigned_token(tokens: TokenFactory) -> str:
+    return jwt.encode(tokens.claims(), "", algorithm="none")
+
+
+# Each builds a token the verifier must reject, from the trusted and an
+# untrusted TokenFactory.
+INVALID_TOKENS: dict[str, Callable[[TokenFactory, TokenFactory], str]] = {
+    "garbage": lambda tokens, untrusted: "not-a-jwt",
+    "expired": lambda tokens, untrusted: tokens.sign(exp=int(time.time()) - 60),
+    "signed by another key": lambda tokens, untrusted: untrusted.sign(),
+    "wrong iss": lambda tokens, untrusted: tokens.sign(iss="https://evil.example/realms/x"),
+    "wrong aud": lambda tokens, untrusted: tokens.sign(aud="https://another.api.example"),
+    "missing exp": lambda tokens, untrusted: tokens.sign(exp=None),
+    "missing iss": lambda tokens, untrusted: tokens.sign(iss=None),
+    "missing aud": lambda tokens, untrusted: tokens.sign(aud=None),
+    "alg none": lambda tokens, untrusted: _unsigned_token(tokens),
+    "HS256-signed": lambda tokens, untrusted: _hs256_token(tokens),
+}
