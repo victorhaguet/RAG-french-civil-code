@@ -19,6 +19,10 @@ _ALGORITHMS = ["RS256"]
 
 _REQUIRED_CLAIMS = ["exp", "iss", "aud", "sub"]
 
+# The Keycloak realm role required by the operations that spend the OpenAI key
+# (`POST /query`, `ask_code_civil`). Read-only operations only need a valid token.
+QUERY_ROLE = "code-civil-query"
+
 
 @dataclass(frozen=True)
 class Identity:

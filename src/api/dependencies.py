@@ -8,7 +8,8 @@ bundles them for `/query`.
 
 `require_access_token` guards the protected routes: it checks the bearer
 token with the cached `TokenVerifier`, which tests override to trust a fixed
-key pair instead of Keycloak's.
+key pair instead of Keycloak's. `require_query_role`, built on it, also
+requires the `QUERY_ROLE` realm role, for the routes that spend the OpenAI key.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from langchain_chroma import Chroma
 
 from src import config
-from src.auth.tokens import Identity, JwksKeyProvider, TokenVerifier
+from src.auth.tokens import QUERY_ROLE, Identity, JwksKeyProvider, TokenVerifier
 from src.retrieval.embeddings import MultilingualE5Embeddings
 from src.retrieval.keyword_index import KeywordIndex
 from src.retrieval.reranker import Reranker
@@ -157,5 +158,20 @@ def require_access_token(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing access token.",
             headers={"WWW-Authenticate": "Bearer"},
+        )
+    return identity
+
+
+def require_query_role(identity: Identity = Depends(require_access_token)) -> Identity:
+    """The caller's Identity, if it holds the `QUERY_ROLE` realm role.
+
+    Raises:
+        HTTPException: 401 as `require_access_token` does, or 403 when the
+            token is valid but lacks the role
+    """
+    if QUERY_ROLE not in identity.roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing required role: {QUERY_ROLE}.",
         )
     return identity

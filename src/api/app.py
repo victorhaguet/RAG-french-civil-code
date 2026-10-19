@@ -23,6 +23,7 @@ from src.api.dependencies import (
     get_query_pipeline,
     get_token_verifier,
     require_access_token,
+    require_query_role,
 )
 from src.api.schemas import ArticleOut, QueryRequest, QueryResponse
 from src.auth.tokens import TokenVerifier
@@ -63,7 +64,7 @@ def health() -> dict[str, str]:
 
 
 @router.post(
-    "/query", response_model=QueryResponse, dependencies=[Depends(require_access_token)]
+    "/query", response_model=QueryResponse, dependencies=[Depends(require_query_role)]
 )
 def query(
     request: QueryRequest,
@@ -138,6 +139,7 @@ def create_app(
     mcp_server = create_server(
         build_query_pipeline,
         get_article_store,
+        require_query_role=True,
         token_verifier=McpTokenVerifier(token_verifier),
         auth=_mcp_auth_settings(),
     )

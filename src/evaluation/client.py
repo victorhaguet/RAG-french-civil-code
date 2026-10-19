@@ -25,7 +25,7 @@ from fastapi.testclient import TestClient
 from src import config
 from src.api.app import app
 from src.api.dependencies import require_access_token
-from src.auth.tokens import Identity
+from src.auth.tokens import QUERY_ROLE, Identity
 
 # httpx.Client's own default (5s, applied separately to connect/write/read/pool)
 # is far too short for /query: a single call does real Hybrid Retrieval
@@ -38,7 +38,7 @@ _LIVE_CLIENT_TIMEOUT = 60.0
 _IN_PROCESS_IDENTITY = Identity(
     subject="in-process-evaluation",
     username="in-process-evaluation",
-    roles=frozenset({"code-civil-query"}),
+    roles=frozenset({QUERY_ROLE}),  # `/query` requires it
     expires_at=sys.maxsize,  # never expires
 )
 

@@ -19,6 +19,8 @@ from pydantic import BaseModel, Field
 
 from src import config
 from src.api.schemas import ArticleOut
+from src.auth.tokens import QUERY_ROLE
+from src.code_civil_mcp.auth import caller_roles
 from src.ingestion.dataset import DATASET_AS_OF, Article
 from src.pipeline import QueryPipeline, answer_query
 from src.storage.article_store import ArticleStore
@@ -58,6 +60,8 @@ class AskCodeCivilResult(BaseModel):
 def create_server(
     query_pipeline: Callable[[], QueryPipeline],
     article_store: Callable[[], ArticleStore],
+    *,
+    require_query_role: bool,
     token_verifier: TokenVerifier | None = None,
     auth: AuthSettings | None = None,
 ) -> MCPServer:
@@ -68,6 +72,9 @@ def create_server(
             components a query runs through, resolved on each tool call
         article_store (Callable[[], ArticleStore]): provider of the Article
             store `get_article` reads from, resolved on each tool call
+        require_query_role (bool): whether `ask_code_civil`, which spends the
+            OpenAI key, requires the caller's token to hold `QUERY_ROLE`.
+            True over HTTP; False over stdio, which has no tokens.
         token_verifier (TokenVerifier | None, optional): checks the bearer
             token of every HTTP request, given together with `auth`. Defaults
             to None: no authentication, as over stdio.
@@ -95,6 +102,8 @@ def create_server(
             Field(gt=0, description="How many Retrieved Articles ground the answer."),
         ] = config.DEFAULT_TOP_K,
     ) -> AskCodeCivilResult:
+        if require_query_role and QUERY_ROLE not in caller_roles():
+            raise ToolError(f"The caller lacks the required role: {QUERY_ROLE}.")
         result = answer_query(question, top_k, query_pipeline())
         return AskCodeCivilResult(
             answer=result.answer,

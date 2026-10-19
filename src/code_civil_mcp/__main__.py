@@ -11,8 +11,13 @@ from src.code_civil_mcp.server import create_server
 
 
 def main() -> None:
-    """Start the MCP server on stdio, with the production (cached) providers."""
-    create_server(build_query_pipeline, get_article_store).run("stdio")
+    """Start the MCP server on stdio, with the production (cached) providers.
+
+    Unauthenticated by design: stdio has no tokens, so no role is required.
+    """
+    create_server(build_query_pipeline, get_article_store, require_query_role=False).run(
+        "stdio"
+    )
 
 
 if __name__ == "__main__":
