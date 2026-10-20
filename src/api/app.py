@@ -42,6 +42,9 @@ MCP_TRANSPORT_SECURITY = TransportSecuritySettings(
     allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
 )
 
+# Keycloak client `/docs` logs in as (see keycloak/code-civil-realm.json).
+SWAGGER_UI_CLIENT_ID = "swagger-ui"
+
 router = APIRouter()
 
 
@@ -155,7 +158,15 @@ def create_app(
         async with mcp_server.session_manager.run():
             yield
 
-    fastapi_app = FastAPI(lifespan=lifespan)
+    fastapi_app = FastAPI(
+        lifespan=lifespan,
+        # Swagger UI's "Authorize" button logs in as Keycloak's public
+        # `swagger-ui` client: no secret, so PKCE protects the code exchange.
+        swagger_ui_init_oauth={
+            "clientId": SWAGGER_UI_CLIENT_ID,
+            "usePkceWithAuthorizationCodeGrant": True,
+        },
+    )
     fastapi_app.include_router(router)
     fastapi_app.mount("/", mcp_app)
     return fastapi_app

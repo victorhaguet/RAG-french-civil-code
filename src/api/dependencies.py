@@ -18,7 +18,7 @@ from functools import lru_cache
 from typing import Any
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi.security import OAuth2AuthorizationCodeBearer
 from langchain_chroma import Chroma
 
 from src import config
@@ -137,13 +137,19 @@ def get_token_verifier() -> TokenVerifier:
     )
 
 
-# auto_error=False: a missing token must get the same 401 as an invalid one,
-# not FastAPI's own error response.
-_bearer_scheme = HTTPBearer(auto_error=False)
+# Reads the `Authorization: Bearer` header, and gives Swagger UI an "Authorize"
+# button that logs in through Keycloak's endpoints. auto_error=False: a missing
+# token must get the same 401 as an invalid one, not FastAPI's own error
+# response.
+_bearer_scheme = OAuth2AuthorizationCodeBearer(
+    authorizationUrl=f"{config.OAUTH_ISSUER}/protocol/openid-connect/auth",
+    tokenUrl=f"{config.OAUTH_ISSUER}/protocol/openid-connect/token",
+    auto_error=False,
+)
 
 
 def require_access_token(
-    credentials: HTTPAuthorizationCredentials | None = Depends(_bearer_scheme),
+    token: str | None = Depends(_bearer_scheme),
     verifier: TokenVerifier = Depends(get_token_verifier),
 ) -> Identity:
     """The caller's Identity, from a valid `Authorization: Bearer` Access Token.
@@ -152,7 +158,7 @@ def require_access_token(
         HTTPException: 401 with `WWW-Authenticate: Bearer` when the token is
             missing or invalid, without saying why
     """
-    identity = verifier.verify(credentials.credentials) if credentials else None
+    identity = verifier.verify(token) if token else None
     if identity is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
