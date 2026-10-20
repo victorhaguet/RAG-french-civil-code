@@ -92,11 +92,41 @@ then embedding every article on CPU), so it takes a few minutes; later builds re
 layers. The image uses `intfloat/multilingual-e5-small` regardless of `EMBEDDING_MODEL` in your
 `.env`, and downloads nothing at runtime.
 
-`.env` is optional: when present it's loaded into the container at runtime (it's never copied
-into the image), and an `OPENAI_API_KEY` exported in your shell takes precedence over it.
-Without either, the container still starts and serves `/health` and `/articles/{ref}` — only
-`/query` needs the key. The API is published on `http://127.0.0.1:8000` (localhost only), and
-the container restarts automatically unless you stop it (`docker compose down`).
+The stack has two services: the API, and [Keycloak](https://www.keycloak.org), the
+authorization server that issues the Access Tokens the API requires (see "Log in from Swagger"
+below). Keycloak's admin password comes from `.env`: set `KEYCLOAK_ADMIN_PASSWORD` there (see
+`.env.example`), since Compose refuses to start without it.
+
+`.env` is also loaded into the API container at runtime (it's never copied into the image), and
+an `OPENAI_API_KEY` exported in your shell takes precedence over it. Without the key, the
+container still starts and serves `/health` and `/articles/{ref}` — only `/query` needs it. The
+API is published on `http://127.0.0.1:8000` and Keycloak on `http://localhost:8080`, both on
+localhost only, and the containers restart automatically unless you stop them
+(`docker compose down`).
+
+### Log in from Swagger
+
+`/query` and `/articles/{ref}` require an Access Token issued by Keycloak. To try them by hand,
+open `http://localhost:8000/docs`, click **Authorize**, then **Authorize** again in the dialog
+(the client ID `swagger-ui` is pre-filled, no secret needed). Log in on Keycloak's page, and
+Swagger sends the token with every request you try. Keycloak's realm, `code-civil`, is imported
+from [`keycloak/code-civil-realm.json`](keycloak/code-civil-realm.json) on every start, so no
+setup is needed in the admin console.
+
+Two demo users exist:
+
+| User     | Password | `POST /query`                          | `GET /articles/{ref}` |
+| -------- | -------- | -------------------------------------- | --------------------- |
+| `demo`   | `demo`   | `200`: has the `code-civil-query` role | `200`                 |
+| `reader` | `reader` | `403`: lacks the role                  | `200`                 |
+
+**These users are for local development only.** Their passwords are public (they're in the
+realm file): remove them before running Keycloak anywhere else.
+
+Access Tokens expire after 5 minutes, and Swagger doesn't renew them: after a `401`, click
+**Authorize** again. Keycloak remembers your browser session, so you won't retype the password.
+To switch users, log out first, via **Logout** in the dialog and at
+`http://localhost:8080/realms/code-civil/account`.
 
 ## Usage
 
@@ -127,7 +157,8 @@ its `ref`:
 curl http://127.0.0.1:8000/articles/{ref}
 ```
 
-Interactive API docs (Swagger UI) are available at `http://127.0.0.1:8000/docs`.
+Interactive API docs (Swagger UI) are available at `http://127.0.0.1:8000/docs`; to call the
+protected routes from there, see "Log in from Swagger".
 
 ## Use it from Claude Code
 
