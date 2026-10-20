@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
+from src import config
 from src.api.app import app
 from tests.app_wiring import client_for, ingest
 from tests.factories import raw_row
@@ -124,3 +125,20 @@ def test_a_valid_token_without_the_query_role_still_gets_the_article(
     response = _article(client, _bearer(tokens.sign(realm_access={"roles": ["other"]})))
 
     assert response.status_code == 200
+
+
+def test_the_openapi_schema_offers_a_keycloak_login() -> None:
+    schema = TestClient(app).get("/openapi.json").json()
+
+    [scheme] = schema["components"]["securitySchemes"].values()
+    flow = scheme["flows"]["authorizationCode"]
+    assert scheme["type"] == "oauth2"
+    assert flow["authorizationUrl"] == f"{config.OAUTH_ISSUER}/protocol/openid-connect/auth"
+    assert flow["tokenUrl"] == f"{config.OAUTH_ISSUER}/protocol/openid-connect/token"
+
+
+def test_swagger_ui_logs_in_as_the_swagger_ui_client_with_pkce() -> None:
+    page = TestClient(app).get("/docs").text
+
+    assert '"clientId": "swagger-ui"' in page
+    assert '"usePkceWithAuthorizationCodeGrant": true' in page
