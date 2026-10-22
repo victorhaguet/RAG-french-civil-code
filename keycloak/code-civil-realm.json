@@ -1,0 +1,102 @@
+{
+  "realm": "code-civil",
+  "displayName": "Code civil (DEV ONLY: demo users, replace before any real deployment)",
+  "enabled": true,
+  "roles": {
+    "realm": [
+      {
+        "name": "code-civil-query",
+        "description": "May run the operations that spend the OpenAI key: POST /query and the ask_code_civil MCP tool."
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "swagger-ui",
+      "name": "Swagger UI (/docs)",
+      "description": "Public client for the API's Swagger UI: authorization code + PKCE, no secret.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": [
+        "http://localhost:8000/docs/oauth2-redirect",
+        "http://127.0.0.1:8000/docs/oauth2-redirect"
+      ],
+      "webOrigins": ["+"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "+"
+      },
+      "protocolMappers": [
+        {
+          "name": "code-civil-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://localhost:8000/mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    },
+    {
+      "clientId": "claude-code",
+      "name": "Claude Code (HTTP MCP Server)",
+      "description": "Public client Claude Code logs in to /mcp with: authorization code + PKCE, no secret, loopback callback on the fixed port given to `claude mcp add --callback-port`.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:33418/callback"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "code-civil-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://localhost:8000/mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "demo",
+      "enabled": true,
+      "email": "demo@example.com",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "DEV ONLY",
+      "credentials": [{ "type": "password", "value": "demo", "temporary": false }],
+      "realmRoles": ["default-roles-code-civil", "code-civil-query"]
+    },
+    {
+      "username": "reader",
+      "enabled": true,
+      "email": "reader@example.com",
+      "emailVerified": true,
+      "firstName": "Reader",
+      "lastName": "DEV ONLY",
+      "credentials": [{ "type": "password", "value": "reader", "temporary": false }],
+      "realmRoles": ["default-roles-code-civil"]
+    }
+  ]
+}

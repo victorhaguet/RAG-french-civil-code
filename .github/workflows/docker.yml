@@ -1,9 +1,14 @@
 # Docker image smoke test: builds the image exactly as compose.yaml describes
-# it, brings it up with Docker Compose and checks it can serve Articles. Fails
-# the PR if the image doesn't build, doesn't become healthy, or can't resolve
-# a known Article. Uses no secrets (the build only embeds, never calls OpenAI,
-# and /health + /articles/{ref} don't need OPENAI_API_KEY), so it also runs on
-# fork PRs.
+# it, brings it up with Docker Compose and checks it holds the Article corpus
+# and guards its routes. Fails the PR if the image doesn't build, doesn't
+# become healthy, can't resolve a known Article, or serves /articles/{ref}
+# without an Access Token. Uses no secrets (the build only embeds, never calls
+# OpenAI, and none of the checks needs OPENAI_API_KEY or a token), so it also
+# runs on fork PRs.
+#
+# No step sends a valid token: CI has no way to get one (Keycloak only issues
+# them through a browser login). Token validation is covered by pytest instead
+# (tests/api/test_auth.py, and tests/auth/test_jwks.py for the JWKS fetch).
 name: Docker Smoke Test
 
 on:
@@ -38,6 +43,9 @@ jobs:
     env:
       # GET /articles/{ref} target: Article 1 of the Code civil (in force).
       SMOKE_ARTICLE_REF: "Code civil, art. 1"
+      # compose.yaml refuses to run without it (no .env exists here). A
+      # throwaway value: this Keycloak lives only for the job, on localhost.
+      KEYCLOAK_ADMIN_PASSWORD: ci-only-admin-password
     steps:
       - uses: actions/checkout@v4
 
@@ -73,13 +81,28 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:8000/health \
             | jq --exit-status '.status == "ok"'
 
-      - name: Check GET /articles/{ref}
+      - name: Check the Article corpus is in the image
+        # Read straight from the Article store inside the container: the HTTP
+        # route needs an Access Token CI can't get (see the top of this file).
+        run: |
+          docker compose exec -T api python -c '
+          import json, sys
+          from src import config
+          from src.storage.article_store import ArticleStore
+          print(json.dumps(ArticleStore(config.ARTICLES_DB_PATH).get(sys.argv[1])))
+          ' "$SMOKE_ARTICLE_REF" \
+            | jq --exit-status --arg ref "$SMOKE_ARTICLE_REF" \
+                '.ref == $ref and .etat == "VIGUEUR" and (.texte | length > 0)'
+
+      - name: Check GET /articles/{ref} rejects a request without a token
         run: |
           # The ref contains spaces and a comma: URL-encode it as the path.
           encoded_ref=$(jq --raw-output --null-input --arg ref "$SMOKE_ARTICLE_REF" '$ref | @uri')
-          curl --fail --silent --show-error "http://127.0.0.1:8000/articles/${encoded_ref}" \
-            | jq --exit-status --arg ref "$SMOKE_ARTICLE_REF" \
-                '.ref == $ref and .etat == "VIGUEUR" and (.texte | length > 0)'
+          headers=$(curl --silent --show-error --output /dev/null --dump-header - \
+            "http://127.0.0.1:8000/articles/${encoded_ref}")
+          echo "$headers"
+          grep --quiet --extended-regexp '^HTTP/[0-9.]+ 401' <<<"$headers"
+          grep --quiet --ignore-case '^www-authenticate: Bearer' <<<"$headers"
 
       - name: Show container logs
         if: failure()

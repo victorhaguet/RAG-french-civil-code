@@ -18,7 +18,7 @@ when that score is strictly better, and kept otherwise. The evaluation runs once
 
 Usage:
     uv run scripts/evaluate.py
-    uv run scripts/evaluate.py --base-url http://localhost:8000
+    EVAL_ACCESS_TOKEN=<access token> uv run scripts/evaluate.py --base-url http://localhost:8000
     uv run scripts/evaluate.py --mode gate
     uv run scripts/evaluate.py --mode gate --update-baseline
 """
@@ -32,7 +32,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from src.evaluation.client import build_query_client
+from src.evaluation.client import MissingAccessTokenError, build_query_client
 from src.evaluation.dataset import load_golden_questions, load_guardrail_questions
 from src.evaluation.gate import Scores, evaluate_gate
 from src.evaluation.golden import GoldenReport, evaluate_golden_questions
@@ -80,7 +80,10 @@ def main() -> None:
     args = parser.parse_args()
     if args.update_baseline and args.mode != "gate":
         parser.error("--update-baseline requires --mode gate")
-    client = build_query_client(args.base_url)
+    try:
+        client = build_query_client(args.base_url)
+    except MissingAccessTokenError as error:
+        parser.error(str(error))
 
     logger.info("Scoring Golden Questions...")
     golden_report = evaluate_golden_questions(

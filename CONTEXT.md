@@ -74,8 +74,46 @@ The interface that exposes the query pipeline to MCP hosts (e.g. Claude Code) as
 `ask_code_civil`, which returns a Grounded Answer or Out-of-Scope Answer together with the full
 text of its Retrieved Articles, and `get_article`, which returns one Article by `ref`. It runs the
 same in-process pipeline as `/query`, over stdio (a subprocess started by the host) or over
-Streamable HTTP (mounted in the API's app at `/mcp`, sharing its loaded models).
+Streamable HTTP (mounted in the API's app at `/mcp`, sharing its loaded models). Over HTTP it
+requires an Access Token, and `ask_code_civil` the Query Role; over stdio it is unauthenticated.
 _Avoid_: MCP (the protocol, not this server), plugin, agent, tool server
+
+## Authentication
+
+**Authorization Server**:
+The Keycloak service of the Compose stack (realm `code-civil`), where users log in and which
+issues Access Tokens. The API never issues tokens or sees passwords: it is only an OAuth resource
+server that checks them. See ADR 0004.
+_Avoid_: Auth server, identity provider, IdP (Keycloak can federate those; here it is the issuer)
+
+**Access Token**:
+A short-lived (5 minutes) RS256-signed JWT issued by the Authorization Server, sent as
+`Authorization: Bearer <token>`. The API checks it locally: signature against the Authorization
+Server's JWKS, plus `exp`, `iss` (`OAUTH_ISSUER`), `aud` (`OAUTH_AUDIENCE`) and `sub`. Required by
+`POST /query`, `GET /articles/{ref}` and `/mcp`; `/health`, the Protected Resource Metadata and
+Swagger UI (`/docs`, `/openapi.json`) stay public.
+_Avoid_: JWT (the format, not the role it plays), bearer token, API key, session
+
+**Identity**:
+The authenticated caller, as a valid Access Token describes them: `sub`, `preferred_username`,
+realm roles and expiry. What the token checks hand to the route or tool; never built from anything
+but a verified token, except the fixed trusted Identity of the in-process evaluation.
+_Avoid_: User (the account lives in the Authorization Server), principal, session
+
+**Query Role**:
+The realm role `code-civil-query` (`QUERY_ROLE` in code), required by the operations that spend
+the OpenAI key: `POST /query` and `ask_code_civil`. Read-only operations (`GET /articles/{ref}`,
+`get_article`) only need a valid Access Token. A valid token without it gets a `403` on REST, or a
+tool error over MCP.
+_Avoid_: Scope (OAuth scopes are what a client may ask for, not what a user may do), permission,
+admin role
+
+**Protected Resource Metadata**:
+The public JSON document (RFC 9728) at `/.well-known/oauth-protected-resource/mcp`, naming `/mcp`
+as the resource and the Authorization Server that issues its Access Tokens. The `401` from `/mcp`
+points to it in its `WWW-Authenticate` header, so an MCP host (e.g. Claude Code) can find where to
+log in before it has a token.
+_Avoid_: Discovery document (that is the Authorization Server's own OpenID configuration), well-known
 
 ## Evaluation
 

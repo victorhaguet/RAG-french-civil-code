@@ -38,7 +38,10 @@ def _providers(
 
 
 def _server(tmp_path: Path, chat_model: FakeChatModel | None = None) -> MCPServer:
-    return create_server(*_providers(tmp_path, chat_model or FakeChatModel()))
+    # No token in memory, as over stdio: no role required.
+    return create_server(
+        *_providers(tmp_path, chat_model or FakeChatModel()), require_query_role=False
+    )
 
 
 def _call_tool(server: MCPServer, arguments: dict[str, Any], name: str = "ask_code_civil") -> Any:
@@ -143,7 +146,9 @@ def test_building_the_server_resolves_the_providers_only_on_a_tool_call(
         provider_calls.append("article_store")
         return provide_article_store()
 
-    server = create_server(recording_pipeline_provider, recording_article_store_provider)
+    server = create_server(
+        recording_pipeline_provider, recording_article_store_provider, require_query_role=False
+    )
     _list_tools(server)
     assert not provider_calls
 

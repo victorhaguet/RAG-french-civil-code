@@ -92,18 +92,94 @@ then embedding every article on CPU), so it takes a few minutes; later builds re
 layers. The image uses `intfloat/multilingual-e5-small` regardless of `EMBEDDING_MODEL` in your
 `.env`, and downloads nothing at runtime.
 
-`.env` is optional: when present it's loaded into the container at runtime (it's never copied
-into the image), and an `OPENAI_API_KEY` exported in your shell takes precedence over it.
-Without either, the container still starts and serves `/health` and `/articles/{ref}` — only
-`/query` needs the key. The API is published on `http://127.0.0.1:8000` (localhost only), and
-the container restarts automatically unless you stop it (`docker compose down`).
+The stack has two services: the API, and [Keycloak](https://www.keycloak.org), the
+authorization server that issues the Access Tokens the API requires (see "Log in from Swagger"
+below). Keycloak's admin password comes from `.env`: set `KEYCLOAK_ADMIN_PASSWORD` there (see
+`.env.example`), since Compose refuses to start without it.
+
+`.env` is also loaded into the API container at runtime (it's never copied into the image), and
+an `OPENAI_API_KEY` exported in your shell takes precedence over it. Without the key, the
+container still starts and serves `/health` and `/articles/{ref}` — only `/query` needs it. The
+API is published on `http://127.0.0.1:8000` and Keycloak on `http://localhost:8080`, both on
+localhost only, and the containers restart automatically unless you stop them
+(`docker compose down`).
+
+### Log in from Swagger
+
+`/query` and `/articles/{ref}` require an Access Token issued by Keycloak. To try them by hand,
+open `http://localhost:8000/docs`, click **Authorize**, then **Authorize** again in the dialog
+(the client ID `swagger-ui` is pre-filled, no secret needed). Log in on Keycloak's page, and
+Swagger sends the token with every request you try. Keycloak's realm, `code-civil`, is imported
+from [`keycloak/code-civil-realm.json`](keycloak/code-civil-realm.json) on every start, so no
+setup is needed in the admin console.
+
+Two demo users exist:
+
+| User     | Password | `POST /query`                          | `GET /articles/{ref}` |
+| -------- | -------- | -------------------------------------- | --------------------- |
+| `demo`   | `demo`   | `200`: has the `code-civil-query` role | `200`                 |
+| `reader` | `reader` | `403`: lacks the role                  | `200`                 |
+
+**These users are for local development only.** Their passwords are public (they're in the
+realm file): remove them before running Keycloak anywhere else.
+
+Access Tokens expire after 5 minutes, and Swagger doesn't renew them: after a `401`, click
+**Authorize** again. Keycloak remembers your browser session, so you won't retype the password.
+To switch users, log out first, via **Logout** in the dialog and at
+`http://localhost:8080/realms/code-civil/account`.
+
+## Authentication
+
+The API is an OAuth resource server: users log in to Keycloak, never to the API, and Keycloak
+issues the short-lived signed JWT Access Tokens the API checks on each protected request (signature against
+Keycloak's public keys, plus expiry, issuer and audience). The API never sees a password and never
+issues a token. ADR [0004](docs/adr/0004-oauth-resource-server-with-keycloak.md) records why.
+
+| Route or tool                                                       | Requires                                         |
+| ------------------------------------------------------------------- | ------------------------------------------------ |
+| `GET /health`, `/.well-known/oauth-protected-resource/mcp`, `/docs` | nothing                                          |
+| `GET /articles/{ref}`, `get_article`                                | an Access Token                                  |
+| `POST /query`, `ask_code_civil`                                     | an Access Token with the `code-civil-query` role |
+
+The role guards what spends your OpenAI key. There's no setting to turn authentication off. Only
+two paths run without a token, because they have no network listener: the stdio MCP Server (see
+[stdio (local)](#stdio-local)) and the in-process evaluation (see [Evaluation](#evaluation)).
+
+Two pre-registered public clients log in with authorization code + PKCE, no secret:
+
+- `swagger-ui`, the **Authorize** button of `/docs`: see [Log in from Swagger](#log-in-from-swagger);
+- `claude-code`, Claude Code's MCP login: see
+  [Use the MCP Server from Claude Code over HTTP](#use-the-mcp-server-from-claude-code-over-http).
+
+To call the API with `curl` or a script, take a token from Swagger: once authorized, run any
+request there, and the `curl` command Swagger shows carries it in its
+`Authorization: Bearer ...` header. It expires after 5 minutes.
+
+### Deploying beyond localhost
+
+The stack is set up for local development only. A real deployment still needs:
+
+- **TLS** in front of both the API and Keycloak: tokens and logins must not travel over plain
+  HTTP. Keycloak also runs in dev mode (`start-dev`, in-memory database) and needs a production
+  setup.
+- **Public URLs** for Keycloak and the API instead of `localhost`, in `KC_HOSTNAME`,
+  `OAUTH_ISSUER`, `OAUTH_JWKS_URL` and `OAUTH_AUDIENCE` (`compose.yaml`), and in the realm file's
+  redirect URIs and audience mapper. The MCP transport's localhost-only `Host`/`Origin` check
+  (`src/api/app.py`) must allow the public host too.
+- **Real users**: remove `demo` and `reader`, whose passwords are public, and grant the
+  `code-civil-query` role only to who may spend the key.
+
+No per-user quota or rate limit exists yet: anyone holding the role can run up the bill.
 
 ## Usage
 
-Ask a question:
+Ask a question, with an Access Token holding the `code-civil-query` role (log in as `demo`; see
+"Authentication" for how to get one):
 
 ```bash
+TOKEN=<access token>
 curl -X POST http://127.0.0.1:8000/query \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"question": "Quand une loi entre-t-elle en vigueur ?"}'
 ```
@@ -121,13 +197,14 @@ curl -X POST http://127.0.0.1:8000/query \
 ```
 
 Questions must be asked in French; English questions are refused without retrieval. The reason is that the retrieval pipeline is using BM25 for hybrid retrieval and this can only work when both data language and query language are the same. Fetch the full text of a cited article by
-its `ref`:
+its `ref` (any valid Access Token, no role needed):
 
 ```bash
-curl http://127.0.0.1:8000/articles/{ref}
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/articles/{ref}
 ```
 
-Interactive API docs (Swagger UI) are available at `http://127.0.0.1:8000/docs`.
+Interactive API docs (Swagger UI) are available at `http://127.0.0.1:8000/docs`; to call the
+protected routes from there, see "Log in from Swagger".
 
 ## Use it from Claude Code
 
@@ -157,7 +234,8 @@ It runs over two transports.
 
 Claude Code starts the server itself, as a subprocess, with `uv run python -m src.code_civil_mcp`.
 The repo commits a [`.mcp.json`](.mcp.json) declaring it, so opening the repo in Claude Code
-offers the `code-civil` server automatically (approve it when prompted). To register it by hand
+offers the `code-civil` server automatically (approve it when prompted). It needs no login:
+there's no network listener, only a subprocess of your own Claude Code. To register it by hand
 instead, from the repo root:
 
 ```bash
@@ -170,20 +248,55 @@ Prerequisites, since the subprocess runs on your machine with your local data:
   (`uv run scripts/ingest.py`, see "Running it"): the server reads `data/` and never ingests;
 - `OPENAI_API_KEY` is set in `.env` at the repo root, which the server loads on startup.
 
-### HTTP (Docker)
+### Use the MCP Server from Claude Code over HTTP
 
 The same server is mounted inside the FastAPI app at `/mcp`, over Streamable HTTP, so the
-container that serves the REST API serves MCP too. Start it, then register it with Claude Code:
+container that serves the REST API serves MCP too. Like `/query`, it requires an Access Token
+issued by Keycloak, and Claude Code gets one for you with a browser login. Start the stack, then
+register the server with Claude Code:
 
 ```bash
 docker compose up --build
-claude mcp add --transport http code-civil-http http://127.0.0.1:8000/mcp
+claude mcp add --transport http --client-id claude-code --callback-port 33418 \
+  code-civil-http http://localhost:8000/mcp
 ```
 
-Add `--scope user` to make it available in every project rather than only the current one. The
-endpoint is unauthenticated, so it is published on localhost only, and it accepts only
-localhost `Host`/`Origin` headers, so a web page can't drive it from your browser (DNS-rebinding
-protection). `uv run uvicorn src.api.app:app` serves `/mcp` the same way, without Docker.
+Then run `/mcp` in Claude Code, select `code-civil-http` and authenticate (or run
+`claude mcp login code-civil-http` from your shell). Your browser opens Keycloak's login page:
+log in as one of the demo users (see "Log in from Swagger"). As `demo`, both tools work. As
+`reader`, `get_article` works, and `ask_code_civil` returns a tool error saying the caller lacks
+the `code-civil-query` role. To switch users, select **Clear authentication** in `/mcp` (or run
+`claude mcp logout code-civil-http`), log out at
+`http://localhost:8080/realms/code-civil/account`, then authenticate again.
+
+What happens under the hood is the standard MCP authorization flow:
+
+1. Claude Code's first request to `/mcp` has no token and gets a `401`, whose
+   `WWW-Authenticate` header points to the server's Protected Resource Metadata.
+2. That metadata (`/.well-known/oauth-protected-resource/mcp`) names Keycloak as the
+   authorization server, and Claude Code reads Keycloak's endpoints from there.
+3. Claude Code logs in through your browser with authorization code + PKCE, as the
+   pre-registered public client `claude-code` (no secret; Keycloak's dynamic client registration
+   isn't used). Keycloak redirects back to Claude Code's local callback,
+   `http://localhost:33418/callback`, the only redirect URI the realm allows for this client.
+4. Access Tokens expire after 5 minutes. Claude Code renews them silently with the refresh
+   token, so you don't log in again.
+
+Mind the details of the command:
+
+- `--client-id claude-code` and `--callback-port 33418` must match the client in
+  [`keycloak/code-civil-realm.json`](keycloak/code-civil-realm.json). There's no
+  `--client-secret`: the client is public. If port 33418 is taken on your machine, change it in
+  both places: `--callback-port` and the client's `redirectUris`.
+- The URL must be `http://localhost:8000/mcp`, not `127.0.0.1`: it must equal the resource the
+  metadata announces, which is also the audience Keycloak puts in the tokens.
+- Add `--scope user` to make the server available in every project rather than only the current
+  one.
+
+The endpoint is published on localhost only, and it accepts only localhost `Host`/`Origin`
+headers, so a web page can't drive it from your browser (DNS-rebinding protection).
+`uv run uvicorn src.api.app:app` serves `/mcp` the same way, without Docker (Keycloak must still
+run, e.g. `docker compose up keycloak`).
 
 ### Things to know
 
@@ -218,8 +331,16 @@ running server:
 
 ```bash
 uv run scripts/evaluate.py
-uv run scripts/evaluate.py --base-url http://127.0.0.1:8000
+EVAL_ACCESS_TOKEN=<access token> uv run scripts/evaluate.py --base-url http://localhost:8000
 ```
+
+The in-process run needs no token: it calls the app inside its own process, as a trusted
+identity holding the `code-civil-query` role. A live run (`--base-url`) calls the protected
+routes over HTTP, so it sends the Access Token in `EVAL_ACCESS_TOKEN` (from the shell or `.env`),
+which must hold the role: log in as `demo` and take the token from Swagger (see "Authentication").
+Without it, the run stops at once. The token expires after 5 minutes and the script doesn't renew
+it, so a live run longer than that fails partway with `401`s: evaluate large question sets
+in-process.
 
 The `eval/*.jsonl` files ship empty — every metric reports "no data" until you populate them, one
 JSON object per line. Golden Questions need `question`, `reference_answer`, and

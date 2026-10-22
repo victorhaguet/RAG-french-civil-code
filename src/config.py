@@ -41,6 +41,21 @@ OPENAI_TIMEOUT = float(os.getenv("OPENAI_TIMEOUT", "60.0"))
 EVAL_JUDGE_BASE_URL = os.getenv("EVAL_JUDGE_BASE_URL")
 EVAL_JUDGE_MODEL = os.getenv("EVAL_JUDGE_MODEL", "gpt-4o-mini")
 
+# Access Token scripts/evaluate.py sends to a live server (`--base-url`). An
+# in-process run needs none: it runs as a trusted identity instead.
+EVAL_ACCESS_TOKEN = os.getenv("EVAL_ACCESS_TOKEN")
+
+# OAuth resource server: the API checks Access Tokens issued by Keycloak.
+# OAUTH_ISSUER is what a token's `iss` must equal, and OAUTH_JWKS_URL is where
+# the signing keys are fetched from. They differ when the API reaches Keycloak
+# under another hostname than the one it issues tokens as (e.g. inside Docker).
+# OAUTH_AUDIENCE is what a token's `aud` must contain.
+OAUTH_ISSUER = os.getenv("OAUTH_ISSUER", "http://localhost:8080/realms/code-civil")
+OAUTH_JWKS_URL = os.getenv(
+    "OAUTH_JWKS_URL", "http://localhost:8080/realms/code-civil/protocol/openid-connect/certs"
+)
+OAUTH_AUDIENCE = os.getenv("OAUTH_AUDIENCE", "http://localhost:8000/mcp")
+
 # Number of Articles `/query` returns when the caller doesn't pass `top_k`.
 DEFAULT_TOP_K = int(os.getenv("DEFAULT_TOP_K", "5"))
 

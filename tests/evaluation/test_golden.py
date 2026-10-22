@@ -24,13 +24,13 @@ class _FakeScorableMetric:
         return SimpleNamespace(value=self.value)
 
 
-def _client(tmp_path: Path, chat_model: FakeChatModel) -> TestClient:
+def _client(tmp_path: Path, token: str, chat_model: FakeChatModel) -> TestClient:
     rows = [raw_row(ref="A1", texte="Les lois s'appliquent dès leur entrée en vigueur.", etat="VIGUEUR")]
-    return client_for(*ingest(tmp_path, rows), chat_model)
+    return client_for(*ingest(tmp_path, rows), chat_model, token=token)
 
 
-def test_reports_no_data_for_an_empty_question_set(tmp_path: Path) -> None:
-    client = _client(tmp_path, FakeChatModel())
+def test_reports_no_data_for_an_empty_question_set(tmp_path: Path, valid_token: str) -> None:
+    client = _client(tmp_path, valid_token, FakeChatModel())
 
     def _fail_if_called() -> tuple[_FakeScorableMetric, _FakeScorableMetric]:
         raise AssertionError("build_metrics must not be called for an empty question set")
@@ -43,8 +43,8 @@ def test_reports_no_data_for_an_empty_question_set(tmp_path: Path) -> None:
     assert not report.scores
 
 
-def test_scores_a_golden_question_via_the_real_query_endpoint(tmp_path: Path) -> None:
-    client = _client(tmp_path, FakeChatModel(answer="Voici la réponse."))
+def test_scores_a_golden_question_via_the_real_query_endpoint(tmp_path: Path, valid_token: str) -> None:
+    client = _client(tmp_path, valid_token, FakeChatModel(answer="Voici la réponse."))
     faithfulness = _FakeScorableMetric(0.75)
     context_recall = _FakeScorableMetric(0.5)
 
@@ -86,8 +86,8 @@ def test_scores_a_golden_question_via_the_real_query_endpoint(tmp_path: Path) ->
     ]
 
 
-def test_a_judge_error_on_one_metric_is_reported_as_none_not_raised(tmp_path: Path) -> None:
-    client = _client(tmp_path, FakeChatModel(answer="Voici la réponse."))
+def test_a_judge_error_on_one_metric_is_reported_as_none_not_raised(tmp_path: Path, valid_token: str) -> None:
+    client = _client(tmp_path, valid_token, FakeChatModel(answer="Voici la réponse."))
     faithfulness = _FakeScorableMetric(0.0)
 
     def _raise(**kwargs: Any) -> Any:
@@ -119,8 +119,8 @@ def test_a_judge_error_on_one_metric_is_reported_as_none_not_raised(tmp_path: Pa
     assert report.context_recall_scored == 1
 
 
-def test_mean_excludes_judge_errors_rather_than_counting_them_as_zero(tmp_path: Path) -> None:
-    client = _client(tmp_path, FakeChatModel())
+def test_mean_excludes_judge_errors_rather_than_counting_them_as_zero(tmp_path: Path, valid_token: str) -> None:
+    client = _client(tmp_path, valid_token, FakeChatModel())
     results: list[float | None] = [0.8, None]
 
     def _score(**_kwargs: Any) -> Any:
@@ -146,8 +146,8 @@ def test_mean_excludes_judge_errors_rather_than_counting_them_as_zero(tmp_path: 
     assert report.faithfulness_scored == 1
 
 
-def test_mean_averages_scores_across_multiple_golden_questions(tmp_path: Path) -> None:
-    client = _client(tmp_path, FakeChatModel())
+def test_mean_averages_scores_across_multiple_golden_questions(tmp_path: Path, valid_token: str) -> None:
+    client = _client(tmp_path, valid_token, FakeChatModel())
     scores = iter([0.2, 0.6])
     faithfulness = _FakeScorableMetric(0.0)
     faithfulness.score = lambda **kwargs: SimpleNamespace(value=next(scores))  # type: ignore[method-assign]

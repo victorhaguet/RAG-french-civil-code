@@ -21,8 +21,8 @@ _ROWS = [
 ]
 
 
-def _client(tmp_path: Path, model: FakeModel, chat_model: FakeChatModel) -> TestClient:
-    return client_for(*ingest(tmp_path, _ROWS, model), chat_model)
+def _client(tmp_path: Path, token: str, model: FakeModel, chat_model: FakeChatModel) -> TestClient:
+    return client_for(*ingest(tmp_path, _ROWS, model), chat_model, token=token)
 
 
 def test_health_returns_a_liveness_check() -> None:
@@ -35,11 +35,11 @@ def test_health_returns_a_liveness_check() -> None:
 
 
 def test_query_returns_the_generated_answer_and_the_retrieved_articles(
-    tmp_path: Path,
+    tmp_path: Path, valid_token: str
 ) -> None:
     model = FakeModel()
     chat_model = FakeChatModel(answer="Voici la réponse.")
-    client = _client(tmp_path, model, chat_model)
+    client = _client(tmp_path, valid_token, model, chat_model)
 
     response = client.post("/query", json={"question": "Quand une loi entre-t-elle en vigueur ?"})
 
@@ -62,10 +62,10 @@ def test_query_returns_the_generated_answer_and_the_retrieved_articles(
     assert "A1" in prompt
 
 
-def test_query_only_ever_retrieves_from_the_in_force_article(tmp_path: Path) -> None:
+def test_query_only_ever_retrieves_from_the_in_force_article(tmp_path: Path, valid_token: str) -> None:
     model = FakeModel()
     chat_model = FakeChatModel()
-    client = _client(tmp_path, model, chat_model)
+    client = _client(tmp_path, valid_token, model, chat_model)
 
     response = client.post("/query", json={"question": "Quelle est la loi applicable ?"})
 
@@ -73,9 +73,9 @@ def test_query_only_ever_retrieves_from_the_in_force_article(tmp_path: Path) -> 
     assert article["ref"] == "A1"
 
 
-def test_query_embeds_the_question_with_the_query_prefix(tmp_path: Path) -> None:
+def test_query_embeds_the_question_with_the_query_prefix(tmp_path: Path, valid_token: str) -> None:
     model = FakeModel()
-    client = _client(tmp_path, model, FakeChatModel())
+    client = _client(tmp_path, valid_token, model, FakeChatModel())
 
     client.post("/query", json={"question": "Quand une loi entre-t-elle en vigueur ?"})
 
@@ -84,11 +84,11 @@ def test_query_embeds_the_question_with_the_query_prefix(tmp_path: Path) -> None
 
 
 def test_query_refuses_an_english_question_without_retrieval_or_generation(
-    tmp_path: Path,
+    tmp_path: Path, valid_token: str
 ) -> None:
     model = FakeModel()
     chat_model = FakeChatModel()
-    client = _client(tmp_path, model, chat_model)
+    client = _client(tmp_path, valid_token, model, chat_model)
     encodes_before = len(model.encode_calls)
 
     response = client.post("/query", json={"question": "When does a law enter into force?"})
@@ -101,10 +101,10 @@ def test_query_refuses_an_english_question_without_retrieval_or_generation(
     assert len(model.encode_calls) == encodes_before
 
 
-def test_query_answers_a_french_question_as_before(tmp_path: Path) -> None:
+def test_query_answers_a_french_question_as_before(tmp_path: Path, valid_token: str) -> None:
     model = FakeModel()
     chat_model = FakeChatModel(answer="Voici la réponse.")
-    client = _client(tmp_path, model, chat_model)
+    client = _client(tmp_path, valid_token, model, chat_model)
 
     response = client.post("/query", json={"question": "Quand une loi entre-t-elle en vigueur ?"})
 
@@ -113,7 +113,7 @@ def test_query_answers_a_french_question_as_before(tmp_path: Path) -> None:
     assert len(chat_model.invoke_calls) == 1
 
 
-def test_query_reranks_candidates_by_cross_encoder_score(tmp_path: Path) -> None:
+def test_query_reranks_candidates_by_cross_encoder_score(tmp_path: Path, valid_token: str) -> None:
     question = "Quelle est la loi applicable ?"
     rows = [
         # Matches the question on both vector length and BM25 keywords, so
@@ -138,7 +138,7 @@ def test_query_reranks_candidates_by_cross_encoder_score(tmp_path: Path) -> None
 
     # Confirm the premise: without reranking (the passthrough double), fusion
     # alone ranks A1 first.
-    baseline_client = client_for(store, article_store, FakeChatModel())
+    baseline_client = client_for(store, article_store, FakeChatModel(), token=valid_token)
     baseline = baseline_client.post("/query", json={"question": question, "top_k": 1})
     assert baseline.json()["articles"][0]["ref"] == "A1"
 
@@ -147,6 +147,7 @@ def test_query_reranks_candidates_by_cross_encoder_score(tmp_path: Path) -> None
         article_store,
         FakeChatModel(),
         reranker=Reranker(model=FakeCrossEncoder()),
+        token=valid_token,
     )
     response = reranked_client.post("/query", json={"question": question, "top_k": 1})
 
@@ -155,7 +156,7 @@ def test_query_reranks_candidates_by_cross_encoder_score(tmp_path: Path) -> None
 
 
 def test_query_surfaces_via_the_keyword_index_an_article_vector_search_alone_would_miss(
-    tmp_path: Path,
+    tmp_path: Path, valid_token: str
 ) -> None:
     model = FakeModel()
     question = "Quelles sont les conditions de mise sous tutelle d'un majeur protégé ?"
@@ -198,7 +199,7 @@ def test_query_surfaces_via_the_keyword_index_an_article_vector_search_alone_wou
         ),
     ]
     store, article_store = ingest(tmp_path, rows, model)
-    client = client_for(store, article_store, FakeChatModel())
+    client = client_for(store, article_store, FakeChatModel(), token=valid_token)
 
     # Confirm the premise: TUTELLE ranks outside top_k on vector search alone.
     vector_only_refs = [
@@ -231,10 +232,10 @@ def _populate_with_two_in_force_articles(
     return ingest(tmp_path, rows, model)
 
 
-def test_query_uses_a_default_top_k_when_none_is_supplied(tmp_path: Path) -> None:
+def test_query_uses_a_default_top_k_when_none_is_supplied(tmp_path: Path, valid_token: str) -> None:
     model = FakeModel()
     store, article_store = _populate_with_two_in_force_articles(tmp_path, model)
-    client = client_for(store, article_store, FakeChatModel())
+    client = client_for(store, article_store, FakeChatModel(), token=valid_token)
 
     response = client.post("/query", json={"question": "Quelle est la loi applicable ?"})
 
@@ -244,10 +245,10 @@ def test_query_uses_a_default_top_k_when_none_is_supplied(tmp_path: Path) -> Non
     assert len(response.json()["articles"]) == 2
 
 
-def test_query_respects_a_caller_supplied_top_k(tmp_path: Path) -> None:
+def test_query_respects_a_caller_supplied_top_k(tmp_path: Path, valid_token: str) -> None:
     model = FakeModel()
     store, article_store = _populate_with_two_in_force_articles(tmp_path, model)
-    client = client_for(store, article_store, FakeChatModel())
+    client = client_for(store, article_store, FakeChatModel(), token=valid_token)
 
     response = client.post(
         "/query", json={"question": "Quelle est la loi applicable ?", "top_k": 1}
@@ -258,9 +259,9 @@ def test_query_respects_a_caller_supplied_top_k(tmp_path: Path) -> None:
     assert len(response.json()["articles"]) == 1
 
 
-def test_query_rejects_a_non_positive_top_k(tmp_path: Path) -> None:
+def test_query_rejects_a_non_positive_top_k(tmp_path: Path, valid_token: str) -> None:
     model = FakeModel()
-    client = _client(tmp_path, model, FakeChatModel())
+    client = _client(tmp_path, valid_token, model, FakeChatModel())
 
     response = client.post(
         "/query", json={"question": "Quelle est la loi applicable ?", "top_k": 0}
@@ -277,10 +278,10 @@ def test_no_ingest_route_is_exposed() -> None:
     assert response.status_code == 404
 
 
-def test_get_article_returns_the_full_article(tmp_path: Path) -> None:
+def test_get_article_returns_the_full_article(tmp_path: Path, valid_token: str) -> None:
     model = FakeModel()
     store, article_store = ingest(tmp_path, _ROWS, model)
-    client = client_for(store, article_store, FakeChatModel())
+    client = client_for(store, article_store, FakeChatModel(), token=valid_token)
 
     response = client.get("/articles/A1")
 
@@ -298,10 +299,10 @@ def test_get_article_returns_the_full_article(tmp_path: Path) -> None:
     }
 
 
-def test_get_article_returns_404_for_an_unknown_ref(tmp_path: Path) -> None:
+def test_get_article_returns_404_for_an_unknown_ref(tmp_path: Path, valid_token: str) -> None:
     model = FakeModel()
     store, article_store = ingest(tmp_path, _ROWS, model)
-    client = client_for(store, article_store, FakeChatModel())
+    client = client_for(store, article_store, FakeChatModel(), token=valid_token)
 
     response = client.get("/articles/UNKNOWN")
 
