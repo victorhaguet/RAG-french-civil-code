@@ -188,7 +188,8 @@ It runs over two transports.
 
 Claude Code starts the server itself, as a subprocess, with `uv run python -m src.code_civil_mcp`.
 The repo commits a [`.mcp.json`](.mcp.json) declaring it, so opening the repo in Claude Code
-offers the `code-civil` server automatically (approve it when prompted). To register it by hand
+offers the `code-civil` server automatically (approve it when prompted). It needs no login:
+there's no network listener, only a subprocess of your own Claude Code. To register it by hand
 instead, from the repo root:
 
 ```bash
@@ -201,20 +202,55 @@ Prerequisites, since the subprocess runs on your machine with your local data:
   (`uv run scripts/ingest.py`, see "Running it"): the server reads `data/` and never ingests;
 - `OPENAI_API_KEY` is set in `.env` at the repo root, which the server loads on startup.
 
-### HTTP (Docker)
+### Use the MCP Server from Claude Code over HTTP
 
 The same server is mounted inside the FastAPI app at `/mcp`, over Streamable HTTP, so the
-container that serves the REST API serves MCP too. Start it, then register it with Claude Code:
+container that serves the REST API serves MCP too. Like `/query`, it requires an Access Token
+issued by Keycloak, and Claude Code gets one for you with a browser login. Start the stack, then
+register the server with Claude Code:
 
 ```bash
 docker compose up --build
-claude mcp add --transport http code-civil-http http://127.0.0.1:8000/mcp
+claude mcp add --transport http --client-id claude-code --callback-port 33418 \
+  code-civil-http http://localhost:8000/mcp
 ```
 
-Add `--scope user` to make it available in every project rather than only the current one. The
-endpoint is unauthenticated, so it is published on localhost only, and it accepts only
-localhost `Host`/`Origin` headers, so a web page can't drive it from your browser (DNS-rebinding
-protection). `uv run uvicorn src.api.app:app` serves `/mcp` the same way, without Docker.
+Then run `/mcp` in Claude Code, select `code-civil-http` and authenticate (or run
+`claude mcp login code-civil-http` from your shell). Your browser opens Keycloak's login page:
+log in as one of the demo users (see "Log in from Swagger"). As `demo`, both tools work. As
+`reader`, `get_article` works, and `ask_code_civil` returns a tool error saying the caller lacks
+the `code-civil-query` role. To switch users, select **Clear authentication** in `/mcp` (or run
+`claude mcp logout code-civil-http`), log out at
+`http://localhost:8080/realms/code-civil/account`, then authenticate again.
+
+What happens under the hood is the standard MCP authorization flow:
+
+1. Claude Code's first request to `/mcp` has no token and gets a `401`, whose
+   `WWW-Authenticate` header points to the server's Protected Resource Metadata.
+2. That metadata (`/.well-known/oauth-protected-resource/mcp`) names Keycloak as the
+   authorization server, and Claude Code reads Keycloak's endpoints from there.
+3. Claude Code logs in through your browser with authorization code + PKCE, as the
+   pre-registered public client `claude-code` (no secret; Keycloak's dynamic client registration
+   isn't used). Keycloak redirects back to Claude Code's local callback,
+   `http://localhost:33418/callback`, the only redirect URI the realm allows for this client.
+4. Access Tokens expire after 5 minutes. Claude Code renews them silently with the refresh
+   token, so you don't log in again.
+
+Mind the details of the command:
+
+- `--client-id claude-code` and `--callback-port 33418` must match the client in
+  [`keycloak/code-civil-realm.json`](keycloak/code-civil-realm.json). There's no
+  `--client-secret`: the client is public. If port 33418 is taken on your machine, change it in
+  both places: `--callback-port` and the client's `redirectUris`.
+- The URL must be `http://localhost:8000/mcp`, not `127.0.0.1`: it must equal the resource the
+  metadata announces, which is also the audience Keycloak puts in the tokens.
+- Add `--scope user` to make the server available in every project rather than only the current
+  one.
+
+The endpoint is published on localhost only, and it accepts only localhost `Host`/`Origin`
+headers, so a web page can't drive it from your browser (DNS-rebinding protection).
+`uv run uvicorn src.api.app:app` serves `/mcp` the same way, without Docker (Keycloak must still
+run, e.g. `docker compose up keycloak`).
 
 ### Things to know
 
