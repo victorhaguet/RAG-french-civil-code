@@ -128,12 +128,58 @@ Access Tokens expire after 5 minutes, and Swagger doesn't renew them: after a `4
 To switch users, log out first, via **Logout** in the dialog and at
 `http://localhost:8080/realms/code-civil/account`.
 
+## Authentication
+
+The API is an OAuth resource server: users log in to Keycloak, never to the API, and Keycloak
+issues the short-lived signed JWT Access Tokens the API checks on each protected request (signature against
+Keycloak's public keys, plus expiry, issuer and audience). The API never sees a password and never
+issues a token. ADR [0004](docs/adr/0004-oauth-resource-server-with-keycloak.md) records why.
+
+| Route or tool                                                       | Requires                                         |
+| ------------------------------------------------------------------- | ------------------------------------------------ |
+| `GET /health`, `/.well-known/oauth-protected-resource/mcp`, `/docs` | nothing                                          |
+| `GET /articles/{ref}`, `get_article`                                | an Access Token                                  |
+| `POST /query`, `ask_code_civil`                                     | an Access Token with the `code-civil-query` role |
+
+The role guards what spends your OpenAI key. There's no setting to turn authentication off. Only
+two paths run without a token, because they have no network listener: the stdio MCP Server (see
+[stdio (local)](#stdio-local)) and the in-process evaluation (see [Evaluation](#evaluation)).
+
+Two pre-registered public clients log in with authorization code + PKCE, no secret:
+
+- `swagger-ui`, the **Authorize** button of `/docs`: see [Log in from Swagger](#log-in-from-swagger);
+- `claude-code`, Claude Code's MCP login: see
+  [Use the MCP Server from Claude Code over HTTP](#use-the-mcp-server-from-claude-code-over-http).
+
+To call the API with `curl` or a script, take a token from Swagger: once authorized, run any
+request there, and the `curl` command Swagger shows carries it in its
+`Authorization: Bearer ...` header. It expires after 5 minutes.
+
+### Deploying beyond localhost
+
+The stack is set up for local development only. A real deployment still needs:
+
+- **TLS** in front of both the API and Keycloak: tokens and logins must not travel over plain
+  HTTP. Keycloak also runs in dev mode (`start-dev`, in-memory database) and needs a production
+  setup.
+- **Public URLs** for Keycloak and the API instead of `localhost`, in `KC_HOSTNAME`,
+  `OAUTH_ISSUER`, `OAUTH_JWKS_URL` and `OAUTH_AUDIENCE` (`compose.yaml`), and in the realm file's
+  redirect URIs and audience mapper. The MCP transport's localhost-only `Host`/`Origin` check
+  (`src/api/app.py`) must allow the public host too.
+- **Real users**: remove `demo` and `reader`, whose passwords are public, and grant the
+  `code-civil-query` role only to who may spend the key.
+
+No per-user quota or rate limit exists yet: anyone holding the role can run up the bill.
+
 ## Usage
 
-Ask a question:
+Ask a question, with an Access Token holding the `code-civil-query` role (log in as `demo`; see
+"Authentication" for how to get one):
 
 ```bash
+TOKEN=<access token>
 curl -X POST http://127.0.0.1:8000/query \
+  -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"question": "Quand une loi entre-t-elle en vigueur ?"}'
 ```
@@ -151,10 +197,10 @@ curl -X POST http://127.0.0.1:8000/query \
 ```
 
 Questions must be asked in French; English questions are refused without retrieval. The reason is that the retrieval pipeline is using BM25 for hybrid retrieval and this can only work when both data language and query language are the same. Fetch the full text of a cited article by
-its `ref`:
+its `ref` (any valid Access Token, no role needed):
 
 ```bash
-curl http://127.0.0.1:8000/articles/{ref}
+curl -H "Authorization: Bearer $TOKEN" http://127.0.0.1:8000/articles/{ref}
 ```
 
 Interactive API docs (Swagger UI) are available at `http://127.0.0.1:8000/docs`; to call the
@@ -285,8 +331,16 @@ running server:
 
 ```bash
 uv run scripts/evaluate.py
-uv run scripts/evaluate.py --base-url http://127.0.0.1:8000
+EVAL_ACCESS_TOKEN=<access token> uv run scripts/evaluate.py --base-url http://localhost:8000
 ```
+
+The in-process run needs no token: it calls the app inside its own process, as a trusted
+identity holding the `code-civil-query` role. A live run (`--base-url`) calls the protected
+routes over HTTP, so it sends the Access Token in `EVAL_ACCESS_TOKEN` (from the shell or `.env`),
+which must hold the role: log in as `demo` and take the token from Swagger (see "Authentication").
+Without it, the run stops at once. The token expires after 5 minutes and the script doesn't renew
+it, so a live run longer than that fails partway with `401`s: evaluate large question sets
+in-process.
 
 The `eval/*.jsonl` files ship empty — every metric reports "no data" until you populate them, one
 JSON object per line. Golden Questions need `question`, `reference_answer`, and

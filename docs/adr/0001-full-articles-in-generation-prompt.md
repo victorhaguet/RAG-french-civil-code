@@ -22,7 +22,8 @@ count was rejected as complexity not worth it for a rare edge case.
 The `/query` response's per-Article entries were also cut down to `ref` + `sectionParentTitre`
 (no full text, no Chunk id), since a consumer can resolve the full Article via the new
 `GET /articles/{ref}` endpoint, backed by the same SQLite store — the data is public, so exposing
-it directly needs no auth.
+it directly needs no auth. (Superseded on that point by ADR 0004: the route now requires an
+Access Token, though no role.)
 
 ## Considered options
 
