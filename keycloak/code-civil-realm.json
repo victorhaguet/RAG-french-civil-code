@@ -45,6 +45,36 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "claude-code",
+      "name": "Claude Code (HTTP MCP Server)",
+      "description": "Public client Claude Code logs in to /mcp with: authorization code + PKCE, no secret, loopback callback on the fixed port given to `claude mcp add --callback-port`.",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "redirectUris": ["http://localhost:33418/callback"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256"
+      },
+      "protocolMappers": [
+        {
+          "name": "code-civil-api-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "consentRequired": false,
+          "config": {
+            "included.custom.audience": "http://localhost:8000/mcp",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
     }
   ],
   "users": [
