@@ -5,13 +5,15 @@ same flow: Query Language gate, Hybrid Retrieval, reranking and generation.
 
 The flow is split in two steps a caller can run on their own: `retrieve` (gate,
 Hybrid Retrieval, reranking, prompt rendering) and `generate` (the chat model
-call), so the Retrieved Articles can be sent before the answer is generated.
-`answer_query` runs both in sequence.
+call, or `generate_stream` to get the answer piece by piece), so the Retrieved
+Articles can be sent before the answer is generated. `answer_query` runs both
+in sequence.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -170,6 +172,27 @@ def generate(prompt: str, pipeline: QueryPipeline) -> str:
     answer: str = pipeline.chat_model.invoke(prompt).content
     logger.info("Chat model responded (%d chars)", len(answer))
     return answer
+
+
+def generate_stream(prompt: str, pipeline: QueryPipeline) -> Iterator[str]:
+    """Generate the answer to a rendered generation prompt, piece by piece, as the chat model streams it.
+
+    Args:
+        prompt (str): the generation prompt, as rendered by `retrieve`
+        pipeline (QueryPipeline): the components the query runs through
+
+    Yields:
+        str: the next non-empty piece of the answer; joined, the pieces are
+            the answer `generate` would return
+    """
+    logger.info("Streaming from chat model...")
+    length = 0
+    for message in pipeline.chat_model.stream(prompt):
+        piece: str = message.content
+        if piece:
+            length += len(piece)
+            yield piece
+    logger.info("Chat model finished streaming (%d chars)", length)
 
 
 def answer_query(question: str, top_k: int, pipeline: QueryPipeline) -> QueryResult:
