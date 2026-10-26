@@ -99,10 +99,10 @@ below). Keycloak's admin password comes from `.env`: set `KEYCLOAK_ADMIN_PASSWOR
 
 `.env` is also loaded into the API container at runtime (it's never copied into the image), and
 an `OPENAI_API_KEY` exported in your shell takes precedence over it. Without the key, the
-container still starts and serves `/health` and `/articles/{ref}` — only `/query` needs it. The
-API is published on `http://127.0.0.1:8000` and Keycloak on `http://localhost:8080`, both on
-localhost only, and the containers restart automatically unless you stop them
-(`docker compose down`).
+container still starts and serves `/health` and `/articles/{ref}` — only `/query` and
+`/query/stream` need it. The API is published on `http://127.0.0.1:8000` and Keycloak on
+`http://localhost:8080`, both on localhost only, and the containers restart automatically unless
+you stop them (`docker compose down`).
 
 ### Log in from Swagger
 
@@ -139,7 +139,7 @@ issues a token. ADR [0004](docs/adr/0004-oauth-resource-server-with-keycloak.md)
 | ------------------------------------------------------------------- | ------------------------------------------------ |
 | `GET /health`, `/.well-known/oauth-protected-resource/mcp`, `/docs` | nothing                                          |
 | `GET /articles/{ref}`, `get_article`                                | an Access Token                                  |
-| `POST /query`, `ask_code_civil`                                     | an Access Token with the `code-civil-query` role |
+| `POST /query`, `POST /query/stream`, `ask_code_civil`               | an Access Token with the `code-civil-query` role |
 
 The role guards what spends your OpenAI key. There's no setting to turn authentication off. Only
 two paths run without a token, because they have no network listener: the stdio MCP Server (see
@@ -195,6 +195,28 @@ curl -X POST http://127.0.0.1:8000/query \
   ]
 }
 ```
+
+To get the answer as it's generated, use `POST /query/stream` with the same body. It sends one
+JSON object per line: the Retrieved Articles first, then the answer piece by piece, then `done` (or
+`error` if generation fails midway). `-N` turns off `curl`'s buffering so each line shows as it
+arrives:
+
+```bash
+curl -N -X POST http://127.0.0.1:8000/query/stream \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Quand une loi entre-t-elle en vigueur ?"}'
+```
+
+```json
+{"type":"articles","articles":[{"ref":"...","sectionParentTitre":"..."}]}
+{"type":"delta","text":"..."}
+{"type":"delta","text":"..."}
+{"type":"done"}
+```
+
+ADR [0005](docs/adr/0005-streamed-answer-as-ndjson-on-a-separate-endpoint.md) records why it's a
+separate endpoint and not Server-Sent Events.
 
 Questions must be asked in French; English questions are refused without retrieval. The reason is that the retrieval pipeline is using BM25 for hybrid retrieval and this can only work when both data language and query language are the same. Fetch the full text of a cited article by
 its `ref` (any valid Access Token, no role needed):
