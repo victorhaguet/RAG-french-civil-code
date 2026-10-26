@@ -8,10 +8,12 @@ requires a bearer token and serves its Protected Resource Metadata.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable
+import logging
+from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import AnyHttpUrl
@@ -25,12 +27,27 @@ from src.api.dependencies import (
     require_access_token,
     require_query_role,
 )
-from src.api.schemas import ArticleOut, QueryRequest, QueryResponse
+from src.api.schemas import (
+    ArticleOut,
+    ArticlesMessage,
+    DeltaMessage,
+    DoneMessage,
+    ErrorMessage,
+    QueryRequest,
+    QueryResponse,
+)
 from src.auth.tokens import TokenVerifier
 from src.code_civil_mcp.auth import McpTokenVerifier
 from src.code_civil_mcp.server import create_server
 from src.ingestion.dataset import Article
-from src.pipeline import QueryPipeline, answer_query
+from src.pipeline import (
+    QueryPipeline,
+    Refusal,
+    Retrieval,
+    answer_query,
+    generate_stream,
+    retrieve,
+)
 from src.storage.article_store import ArticleStore
 
 # DNS-rebinding protection: a web page can't drive the local server from a
@@ -41,6 +58,14 @@ MCP_TRANSPORT_SECURITY = TransportSecuritySettings(
     allowed_hosts=["127.0.0.1:*", "localhost:*", "[::1]:*"],
     allowed_origins=["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"],
 )
+
+logger = logging.getLogger(__name__)
+
+NDJSON_MEDIA_TYPE = "application/x-ndjson"
+
+# What a Streamed Answer ends with when generation fails after streaming has
+# started: the status is already sent, and the failure's details stay in the logs.
+STREAM_ERROR_MESSAGE = "Answer generation failed."
 
 # Keycloak client `/docs` logs in as (see keycloak/code-civil-realm.json).
 SWAGGER_UI_CLIENT_ID = "swagger-ui"
@@ -88,6 +113,78 @@ def query(
         answer=result.answer,
         articles=[_to_article_out(article) for article in result.articles],
     )
+
+
+def _ndjson_line(message: ArticlesMessage | DeltaMessage | DoneMessage | ErrorMessage) -> str:
+    """One Streamed Answer message as an NDJSON line.
+
+    Args:
+        message (ArticlesMessage | DeltaMessage | DoneMessage | ErrorMessage):
+            the message to send
+
+    Returns:
+        str: the message as compact JSON, newline-terminated
+    """
+    return message.model_dump_json() + "\n"
+
+
+def _streamed_answer(retrieval: Retrieval | Refusal, pipeline: QueryPipeline) -> Iterator[str]:
+    """The Streamed Answer's lines: the Retrieved Articles, the answer piece by piece, then `done`.
+
+    A generation failure ends the stream with an `error` message instead of
+    `done`: by then the `200` and the first lines are already sent.
+
+    Args:
+        retrieval (Retrieval | Refusal): what `retrieve` returned for the question
+        pipeline (QueryPipeline): the components the query runs through
+
+    Yields:
+        str: one JSON message per line
+    """
+    if isinstance(retrieval, Refusal):
+        yield _ndjson_line(ArticlesMessage(articles=[]))
+        yield _ndjson_line(DeltaMessage(text=retrieval.answer))
+        yield _ndjson_line(DoneMessage())
+        return
+
+    yield _ndjson_line(
+        ArticlesMessage(articles=[_to_article_out(article) for article in retrieval.articles])
+    )
+    try:
+        for piece in generate_stream(retrieval.prompt, pipeline):
+            yield _ndjson_line(DeltaMessage(text=piece))
+    except Exception:
+        logger.exception("Answer generation failed mid-stream")
+        yield _ndjson_line(ErrorMessage(message=STREAM_ERROR_MESSAGE))
+        return
+    yield _ndjson_line(DoneMessage())
+
+
+@router.post(
+    "/query/stream",
+    response_class=StreamingResponse,
+    responses={200: {"content": {NDJSON_MEDIA_TYPE: {}}, "description": "A Streamed Answer."}},
+    dependencies=[Depends(require_query_role)],
+)
+def query_stream(
+    request: QueryRequest,
+    pipeline: QueryPipeline = Depends(get_query_pipeline),
+) -> StreamingResponse:
+    """Same as `/query`, but stream the result as NDJSON: the Retrieved Articles first, then the answer as it's generated.
+
+    Retrieval runs before the response starts, so its failures are still a
+    plain `500`; only generation is streamed.
+
+    Args:
+        request (QueryRequest): Query request received from the user
+        pipeline (QueryPipeline, optional): the components the query runs
+            through. Defaults to Depends(get_query_pipeline).
+
+    Returns:
+        StreamingResponse: the Streamed Answer, one JSON message per line
+    """
+    retrieval = retrieve(request.question, request.top_k, pipeline)
+    return StreamingResponse(_streamed_answer(retrieval, pipeline), media_type=NDJSON_MEDIA_TYPE)
 
 
 @router.get(

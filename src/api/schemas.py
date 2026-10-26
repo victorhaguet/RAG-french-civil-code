@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from src import config
@@ -30,3 +32,33 @@ class QueryResponse(BaseModel):
 
     answer: str
     articles: list[ArticleOut]
+
+
+class ArticlesMessage(BaseModel):
+    """A Streamed Answer's first message: the Retrieved Articles, before any of the answer."""
+
+    type: Literal["articles"] = "articles"
+    articles: list[ArticleOut]
+
+
+class DeltaMessage(BaseModel):
+    """The next piece of a Streamed Answer's answer, in order."""
+
+    type: Literal["delta"] = "delta"
+    text: str
+
+
+class DoneMessage(BaseModel):
+    """A Streamed Answer's last message, when the whole answer was sent."""
+
+    type: Literal["done"] = "done"
+
+
+class ErrorMessage(BaseModel):
+    """A Streamed Answer's last message, instead of `done`, when generation failed midway.
+
+    Carries a generic message only, never the failure's internal details.
+    """
+
+    type: Literal["error"] = "error"
+    message: str
