@@ -115,6 +115,7 @@ disable = [
     # exactly one item; Python raises at runtime if the count is wrong anyway.
     "unbalanced-tuple-unpacking",
     # The RAGAS judge step catches every exception so that one judge failure
-    # doesn't abort a whole Golden Question run.
+    # doesn't abort a whole Golden Question run, and `/query/stream` catches
+    # every generation failure to end the stream with an `error` message.
     "broad-exception-caught",
 ]
