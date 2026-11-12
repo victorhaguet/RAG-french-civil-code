@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Assistant juridique – Code civil</title>
+    <link rel="icon" type="image/png" href="assets/favicon.png" />
+    <link rel="stylesheet" href="main.css" />
+    <script type="module" src="main.js"></script>
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="site-header__inner">
+        <a class="brand" href="./">
+          <img class="brand__logo" src="assets/logo.png" alt="" width="48" height="48" />
+          <span class="brand__title">Assistant juridique <span class="brand__sub">Code civil</span></span>
+        </a>
+        <nav class="account" aria-label="Compte">
+          <span id="username" class="account__user"></span>
+          <a id="logout" class="account__logout" href="#">Se déconnecter</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="page">
+      <p id="loading" class="loading" role="status">Connexion…</p>
+
+      <div id="web-ui" hidden>
+        <form id="question-form" class="card ask" novalidate>
+          <label class="ask__label" for="question">Votre question sur le Code civil</label>
+          <textarea
+            id="question"
+            class="ask__input"
+            name="question"
+            rows="4"
+            placeholder="Par exemple : quand une loi entre-t-elle en vigueur ?"
+          ></textarea>
+          <div class="ask__actions">
+            <span class="ask__hint">Ctrl (⌘) + Entrée pour envoyer</span>
+            <button id="submit" class="button" type="submit">Poser la question</button>
+          </div>
+        </form>
+
+        <p id="notice" class="notice" role="alert" hidden></p>
+
+        <section id="answer-section" class="card answer" aria-live="polite" hidden>
+          <h2 class="answer__title">Réponse</h2>
+          <div id="answer" class="answer__text"></div>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      Réponses générées à partir des articles du Code civil en vigueur. Elles ne remplacent pas
+      l'avis d'un professionnel du droit.
+    </footer>
+  </body>
+</html>

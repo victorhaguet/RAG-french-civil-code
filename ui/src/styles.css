@@ -1,0 +1,341 @@
+/*
+ * The Web UI's design, from the logo: the navy of its ring, the gold of its
+ * lettering and stars, the wood of the courtroom, on parchment. Later screens
+ * reuse these variables instead of defining their own.
+ */
+
+:root {
+  /* Palette, from the logo. */
+  --navy-900: #111c27;
+  --navy-800: #1a2b3c;
+  --navy-700: #26405a;
+  --gold-500: #cfa247;
+  --gold-600: #b2862d;
+  --gold-300: #e6cd8f;
+  --wood-700: #7f5536;
+  --wood-500: #a2683a;
+  --parchment-50: #fbf7ef;
+  --parchment-100: #f4ecdc;
+  --parchment-300: #ddc39e;
+
+  /* Roles: what the rest of the CSS uses. */
+  --color-bg: var(--parchment-50);
+  --color-surface: #ffffff;
+  --color-text: var(--navy-800);
+  --color-text-muted: #5b5148;
+  --color-border: var(--parchment-300);
+  --color-header-bg: var(--navy-800);
+  --color-header-text: var(--parchment-50);
+  --color-accent: var(--gold-500);
+  --color-accent-hover: var(--gold-600);
+  --color-accent-text: var(--navy-900);
+  --color-link: var(--wood-700);
+  --color-focus: var(--gold-500);
+  --color-notice-bg: #fbeedd;
+  --color-notice-border: var(--wood-500);
+  --color-notice-text: #5a3818;
+
+  /* Typography. */
+  --font-heading: "Iowan Old Style", "Palatino Linotype", Palatino, "Book Antiqua", Georgia, serif;
+  --font-body: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --line-height: 1.6;
+
+  /* Spacing, shape. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgb(17 28 39 / 0.08), 0 4px 16px rgb(17 28 39 / 0.06);
+  --content-width: 46rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: var(--navy-900);
+    --color-surface: var(--navy-800);
+    --color-text: var(--parchment-100);
+    --color-text-muted: #b9ad9b;
+    --color-border: var(--navy-700);
+    --color-header-bg: #0b131b;
+    --color-header-text: var(--parchment-100);
+    --color-accent: var(--gold-500);
+    --color-accent-hover: var(--gold-300);
+    --color-accent-text: var(--navy-900);
+    --color-link: var(--gold-300);
+    --color-notice-bg: #3a2a1a;
+    --color-notice-border: var(--gold-600);
+    --color-notice-text: var(--gold-300);
+    --shadow: 0 1px 2px rgb(0 0 0 / 0.4);
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: var(--text-base);
+  line-height: var(--line-height);
+}
+
+[hidden] {
+  display: none !important;
+}
+
+a {
+  color: var(--color-link);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Header: logo + title, account on the right. */
+
+.site-header {
+  background: var(--color-header-bg);
+  color: var(--color-header-text);
+  border-bottom: 3px solid var(--color-accent);
+}
+
+.site-header__inner {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: inherit;
+  text-decoration: none;
+}
+
+.brand__logo {
+  width: 48px;
+  height: 48px;
+  flex: none;
+}
+
+.brand__title {
+  font-family: var(--font-heading);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.brand__sub {
+  display: block;
+  color: var(--color-accent);
+  font-size: var(--text-sm);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.account {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.account__user {
+  opacity: 0.85;
+}
+
+.account__logout {
+  color: var(--color-accent);
+}
+
+/* Content. */
+
+.page {
+  flex: 1;
+  width: 100%;
+  max-width: var(--content-width);
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4) var(--space-8);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+#web-ui {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.loading {
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
+.card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: var(--space-4);
+}
+
+.ask {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ask__label {
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+
+.ask__input {
+  width: 100%;
+  min-height: 6.5rem;
+  resize: vertical;
+  padding: var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--color-bg);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.ask__input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.ask__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.ask__hint {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.button {
+  padding: var(--space-2) var(--space-6);
+  border: none;
+  border-radius: 999px;
+  background: var(--color-accent);
+  color: var(--color-accent-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button:hover:not(:disabled) {
+  background: var(--color-accent-hover);
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: progress;
+}
+
+.notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border-left: 4px solid var(--color-notice-border);
+  border-radius: calc(var(--radius) - 4px);
+  background: var(--color-notice-bg);
+  color: var(--color-notice-text);
+}
+
+.answer__title {
+  margin: 0 0 var(--space-2);
+  font-family: var(--font-heading);
+  font-size: var(--text-lg);
+  color: var(--color-link);
+}
+
+.answer__text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* A caret while the answer streams in. */
+.answer[aria-busy="true"] .answer__text::after {
+  content: "▍";
+  margin-left: 1px;
+  color: var(--color-accent);
+  animation: blink 1s steps(2, start) infinite;
+}
+
+@keyframes blink {
+  to {
+    visibility: hidden;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .answer[aria-busy="true"] .answer__text::after {
+    animation: none;
+  }
+}
+
+.site-footer {
+  padding: var(--space-4);
+  text-align: center;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+/* Phone width: full-width button, tighter padding. */
+@media (max-width: 480px) {
+  .page {
+    padding: var(--space-4) var(--space-3) var(--space-6);
+  }
+
+  .brand__logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .brand__title {
+    font-size: var(--text-lg);
+  }
+
+  .ask__hint {
+    display: none;
+  }
+
+  .button {
+    width: 100%;
+    padding: var(--space-3);
+  }
+}

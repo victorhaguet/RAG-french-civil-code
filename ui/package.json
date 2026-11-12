@@ -1,0 +1,22 @@
+{
+  "name": "code-civil-web-ui",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Web UI of the RAG French Civil Code API: plain HTML, CSS and TypeScript, bundled with esbuild.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "keycloak-js": "^26.2.5"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.2",
+    "jsdom": "^31.0.0",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0"
+  }
+}
