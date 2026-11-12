@@ -20,3 +20,10 @@ export const QUERY_STREAM_URL = "/query/stream";
  * many seconds, so it can't expire while the answer streams in.
  */
 export const TOKEN_MIN_VALIDITY_SECONDS = 30;
+
+/** About: the public endpoint the header's facts come from. */
+export const ABOUT_URL = "/about";
+
+/** The source dataset, and its Hugging Face page, linked from the header. */
+export const DATASET_NAME = "louisbrulenaudet/code-civil";
+export const DATASET_URL = `https://huggingface.co/datasets/${DATASET_NAME}`;

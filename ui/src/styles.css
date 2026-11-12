@@ -26,6 +26,7 @@
   --color-border: var(--parchment-300);
   --color-header-bg: var(--navy-800);
   --color-header-text: var(--parchment-50);
+  --color-header-link: var(--gold-300);
   --color-accent: var(--gold-500);
   --color-accent-hover: var(--gold-600);
   --color-accent-text: var(--navy-900);
@@ -171,6 +172,34 @@ a {
 }
 
 .account__logout {
+  color: var(--color-accent);
+}
+
+/* Header intro: what the project is, then the disclaimer. Below the brand
+   row, full width. */
+
+.intro {
+  flex-basis: 100%;
+  font-size: var(--text-sm);
+  line-height: var(--line-height);
+}
+
+.intro__facts {
+  margin: 0 0 var(--space-2);
+  opacity: 0.92;
+}
+
+.intro__facts strong {
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.intro__facts a {
+  color: var(--color-header-link);
+}
+
+.intro__disclaimer {
+  margin: 0;
   color: var(--color-accent);
 }
 

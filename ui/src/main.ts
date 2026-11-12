@@ -12,6 +12,7 @@ import {
   TOKEN_MIN_VALIDITY_SECONDS,
   WEB_UI_PATH,
 } from "./config";
+import { fetchAbout, renderAboutFacts } from "./about";
 import { errorMessage } from "./errorMessages";
 import { streamAnswer } from "./streamAnswer";
 import "./styles.css";
@@ -33,6 +34,18 @@ const keycloak = new Keycloak({
 });
 
 const loading = element<HTMLElement>("loading");
+
+/** Fill the header's facts from `/about`, independently of login: it's public. */
+async function showAbout(): Promise<void> {
+  const about = await fetchAbout();
+  if (about === null) {
+    // The header keeps its title and disclaimer, without the facts.
+    return;
+  }
+  const facts = element<HTMLElement>("about");
+  renderAboutFacts(facts, about);
+  facts.hidden = false;
+}
 
 async function main(): Promise<void> {
   // Redirects to Keycloak's login page when there's no session yet, and
@@ -122,6 +135,8 @@ async function main(): Promise<void> {
   loading.hidden = true;
   question.focus();
 }
+
+void showAbout();
 
 main().catch(() => {
   loading.textContent =
