@@ -17,10 +17,11 @@ no setup in the admin console. One verifier, `src.auth.tokens.TokenVerifier`, se
 routes and the MCP Server, which only adapts it to the MCP SDK's `TokenVerifier` protocol.
 
 **2. Clients are pre-registered public clients, using authorization code + PKCE.** The realm
-declares `claude-code` (for Claude Code's MCP login) and `swagger-ui` (for the "Authorize" button
-on `/docs`). Neither has a secret, since a CLI or a browser page can't keep one: PKCE protects the
-code exchange instead. Each client's redirect URIs are fixed in the realm, and each carries an
-audience mapper that puts the API's resource URL in the tokens' `aud`.
+declares `claude-code` (for Claude Code's MCP login), `swagger-ui` (for the "Authorize" button
+on `/docs`) and `web-ui` (for the Web UI at `/ui/`, redirect URIs limited to
+`http://localhost:8000/ui/*`). None has a secret, since a CLI or a browser page can't keep one:
+PKCE protects the code exchange instead. Each client's redirect URIs are fixed in the realm, and
+each carries an audience mapper that puts the API's resource URL in the tokens' `aud`.
 
 **3. Authorization is a realm role, `code-civil-query` (the Query Role).** The operations that
 spend the OpenAI key (`POST /query`, `ask_code_civil`) require it. The free, read-only ones
@@ -32,15 +33,17 @@ The demo users show the difference: `demo` holds the role, `reader` doesn't.
 server, and a deployment are all protected by default; there's no flag to forget in production.
 `/health` (the Docker healthcheck) and the Protected Resource Metadata (which a client reads
 before it has a token) stay public, as they must, and so does Swagger UI (`/docs`,
-`/openapi.json`), which only describes the API and logs in through Keycloak.
+`/openapi.json`), which only describes the API and logs in through Keycloak. The Web UI's files
+(`/`, which redirects to `/ui/`, and `/ui/`) are public for the same reason: they are only a page
+that logs in to Keycloak, and every call it makes sends the user's Access Token.
 
 **5. Tokens are checked locally, not introspected.** The API checks each token's RS256 signature
 against Keycloak's published keys (JWKS, cached by `PyJWKClient`), plus `exp`, `iss`, `aud` and
 `sub`. It never calls Keycloak per request, so a token stays valid until it expires even if the
 user logs out or loses the role. That's acceptable because Access Tokens live 5 minutes: a revoked
 user keeps access for at most that long, and refresh tokens, which Keycloak does check, can't
-renew it. Claude Code renews tokens silently with its refresh token; Swagger asks the user to
-authorize again.
+renew it. Claude Code and the Web UI renew tokens silently with their refresh token (the Web UI
+before each API call); Swagger asks the user to authorize again.
 
 **6. The MCP SDK's `validate_token_resource` is off.** The SDK's own audience check expects RFC
 8707 resource indicators, which Keycloak doesn't put in its tokens by default. The shared verifier
@@ -84,8 +87,7 @@ identity holding the Query Role. Only a live evaluation (`--base-url`) sends a t
 - **TLS for deployment.** The stack serves plain HTTP on localhost. Anywhere else, tokens and
   logins need HTTPS in front of both the API and Keycloak, with public URLs replacing `localhost`
   in `KC_HOSTNAME`, `OAUTH_ISSUER`, `OAUTH_JWKS_URL`, `OAUTH_AUDIENCE`, the clients' redirect URIs
-  and audience mapper, and the MCP transport's localhost-only `Host`/`Origin` check.
+  and audience mapper, the Web UI's `KEYCLOAK_URL`, and the MCP transport's localhost-only
+  `Host`/`Origin` check.
 - **Per-user quotas or rate limiting.** The Query Role decides who may spend the key, not how
   much: a user holding it can still run up the bill.
-- **A Keycloak client for the planned UI**, a public client with authorization code + PKCE like
-  `swagger-ui`, with the UI's own redirect URIs and the audience mapper.

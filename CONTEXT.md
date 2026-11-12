@@ -89,6 +89,13 @@ Streamable HTTP (mounted in the API's app at `/mcp`, sharing its loaded models).
 requires an Access Token, and `ask_code_civil` the Query Role; over stdio it is unauthenticated.
 _Avoid_: MCP (the protocol, not this server), plugin, agent, tool server
 
+**Web UI**:
+The browser interface served by the API at `/ui/` (`GET /` redirects there): plain HTML, CSS and
+TypeScript built from `ui/`. It logs in to the Authorization Server as the public client `web-ui`,
+then asks `POST /query/stream` a question with the user's Access Token and shows the Streamed Answer
+as it arrives. Its files are public; what it calls is not.
+_Avoid_: Frontend, front, client (a Keycloak client is a different thing), app, website
+
 ## Authentication
 
 **Authorization Server**:
@@ -102,7 +109,8 @@ A short-lived (5 minutes) RS256-signed JWT issued by the Authorization Server, s
 `Authorization: Bearer <token>`. The API checks it locally: signature against the Authorization
 Server's JWKS, plus `exp`, `iss` (`OAUTH_ISSUER`), `aud` (`OAUTH_AUDIENCE`) and `sub`. Required by
 `POST /query`, `POST /query/stream`, `GET /articles/{ref}` and `/mcp`; `/health`, the Protected
-Resource Metadata and Swagger UI (`/docs`, `/openapi.json`) stay public.
+Resource Metadata, Swagger UI (`/docs`, `/openapi.json`) and the Web UI's files (`/`, `/ui/`) stay
+public.
 _Avoid_: JWT (the format, not the role it plays), bearer token, API key, session
 
 **Identity**:

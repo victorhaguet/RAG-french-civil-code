@@ -104,6 +104,33 @@ container still starts and serves `/health` and `/articles/{ref}` — only `/que
 `http://localhost:8080`, both on localhost only, and the containers restart automatically unless
 you stop them (`docker compose down`).
 
+### Use the Web UI
+
+Open `http://localhost:8000/`: it redirects to the Web UI (`/ui/`), which sends you to Keycloak's
+login page. Log in as `demo` (password `demo`), and you're back on the UI, ready to ask a question
+in French. The answer appears as it's generated. As `reader`, asking shows a message saying the
+account lacks the required role. **Se déconnecter** logs you out of Keycloak too, so reopening the
+page asks for the login again.
+
+Use `localhost`, not `127.0.0.1`: the Keycloak client only allows redirects back to
+`http://localhost:8000/ui/*`.
+
+The UI is plain HTML, CSS and TypeScript in [`ui/`](ui), bundled with esbuild (no framework, and
+nothing loaded from a CDN). The Docker image builds it in its own stage. To work on it locally,
+with Node 22:
+
+```bash
+cd ui
+npm ci
+npm run build       # or `npm run watch` to rebuild on every change
+npm run typecheck   # tsc --noEmit
+npm test            # Vitest
+```
+
+`uv run uvicorn src.api.app:app --reload` then serves the build (`ui/dist/`) at
+`http://localhost:8000/ui/` (Keycloak must run: `docker compose up keycloak`). Without a build,
+the API still starts and `/ui/` is a `404`.
+
 ### Log in from Swagger
 
 `/query` and `/articles/{ref}` require an Access Token issued by Keycloak. To try them by hand,
@@ -138,6 +165,7 @@ issues a token. ADR [0004](docs/adr/0004-oauth-resource-server-with-keycloak.md)
 | Route or tool                                                       | Requires                                         |
 | ------------------------------------------------------------------- | ------------------------------------------------ |
 | `GET /health`, `/.well-known/oauth-protected-resource/mcp`, `/docs` | nothing                                          |
+| `GET /` (redirects to `/ui/`), the Web UI's files under `/ui/`      | nothing (the UI logs in to Keycloak itself)      |
 | `GET /articles/{ref}`, `get_article`                                | an Access Token                                  |
 | `POST /query`, `POST /query/stream`, `ask_code_civil`               | an Access Token with the `code-civil-query` role |
 
@@ -145,8 +173,9 @@ The role guards what spends your OpenAI key. There's no setting to turn authenti
 two paths run without a token, because they have no network listener: the stdio MCP Server (see
 [stdio (local)](#stdio-local)) and the in-process evaluation (see [Evaluation](#evaluation)).
 
-Two pre-registered public clients log in with authorization code + PKCE, no secret:
+Three pre-registered public clients log in with authorization code + PKCE, no secret:
 
+- `web-ui`, the Web UI at `/ui/`: see [Use the Web UI](#use-the-web-ui);
 - `swagger-ui`, the **Authorize** button of `/docs`: see [Log in from Swagger](#log-in-from-swagger);
 - `claude-code`, Claude Code's MCP login: see
   [Use the MCP Server from Claude Code over HTTP](#use-the-mcp-server-from-claude-code-over-http).
@@ -163,8 +192,9 @@ The stack is set up for local development only. A real deployment still needs:
   HTTP. Keycloak also runs in dev mode (`start-dev`, in-memory database) and needs a production
   setup.
 - **Public URLs** for Keycloak and the API instead of `localhost`, in `KC_HOSTNAME`,
-  `OAUTH_ISSUER`, `OAUTH_JWKS_URL` and `OAUTH_AUDIENCE` (`compose.yaml`), and in the realm file's
-  redirect URIs and audience mapper. The MCP transport's localhost-only `Host`/`Origin` check
+  `OAUTH_ISSUER`, `OAUTH_JWKS_URL` and `OAUTH_AUDIENCE` (`compose.yaml`), in the realm file's
+  redirect URIs and audience mapper, and in the Web UI's `KEYCLOAK_URL` (`ui/src/config.ts`). The
+  MCP transport's localhost-only `Host`/`Origin` check
   (`src/api/app.py`) must allow the public host too.
 - **Real users**: remove `demo` and `reader`, whose passwords are public, and grant the
   `code-civil-query` role only to who may spend the key.
