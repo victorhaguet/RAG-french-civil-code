@@ -34,6 +34,7 @@ from src.api.dependencies import (
     require_query_role,
 )
 from src.api.schemas import (
+    AboutResponse,
     ArticleOut,
     ArticlesMessage,
     DeltaMessage,
@@ -45,7 +46,7 @@ from src.api.schemas import (
 from src.auth.tokens import TokenVerifier
 from src.code_civil_mcp.auth import McpTokenVerifier
 from src.code_civil_mcp.server import create_server
-from src.ingestion.dataset import Article
+from src.ingestion.dataset import DATASET_AS_OF_DATE, Article
 from src.pipeline import (
     QueryPipeline,
     Refusal,
@@ -95,6 +96,27 @@ def _to_article_out(article: Article) -> ArticleOut:
 def health() -> dict[str, str]:
     """Liveness check."""
     return {"status": "ok"}
+
+
+@router.get("/about", response_model=AboutResponse)
+def about(article_store: ArticleStore = Depends(get_article_store)) -> AboutResponse:
+    """About: the dataset snapshot date, the Article count and the generation model.
+
+    Public, like `/health`: the Web UI's header shows these facts, read from
+    the running server so they can't drift from it.
+
+    Args:
+        article_store (ArticleStore, optional): the Article store whose
+            Articles are counted. Defaults to Depends(get_article_store).
+
+    Returns:
+        AboutResponse: the snapshot date, the Article count and the model
+    """
+    return AboutResponse(
+        dataset_as_of=DATASET_AS_OF_DATE,
+        article_count=article_store.count(),
+        model=config.OPENAI_MODEL,
+    )
 
 
 @router.post(

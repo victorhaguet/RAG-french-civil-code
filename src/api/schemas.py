@@ -2,11 +2,20 @@
 
 from __future__ import annotations
 
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, Field
 
 from src import config
+
+
+class AboutResponse(BaseModel):
+    """About: the facts the Web UI's header presents, read from the running server."""
+
+    dataset_as_of: date = Field(description="The Code civil dataset's snapshot date.")
+    article_count: int = Field(description="How many Articles the Article store holds.")
+    model: str = Field(description="The configured generation model.")
 
 
 class QueryRequest(BaseModel):

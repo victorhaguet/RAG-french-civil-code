@@ -78,6 +78,16 @@ class ArticleStore:
             rows = cursor.fetchall()
         return [cast(Article, dict(zip(KEPT_FIELDS, row, strict=True))) for row in rows]
 
+    def count(self) -> int:
+        """How many Articles the store holds.
+
+        Returns:
+            int: the number of stored Articles.
+        """
+        with self._lock:
+            (count,) = self._connection.execute("SELECT COUNT(*) FROM articles").fetchone()
+        return int(count)
+
     def get(self, ref: str) -> Article | None:
         """Resolve a `ref` to its full Article.
 
