@@ -162,12 +162,12 @@ issues the short-lived signed JWT Access Tokens the API checks on each protected
 Keycloak's public keys, plus expiry, issuer and audience). The API never sees a password and never
 issues a token. ADR [0004](docs/adr/0004-oauth-resource-server-with-keycloak.md) records why.
 
-| Route or tool                                                       | Requires                                         |
-| ------------------------------------------------------------------- | ------------------------------------------------ |
-| `GET /health`, `/.well-known/oauth-protected-resource/mcp`, `/docs` | nothing                                          |
-| `GET /` (redirects to `/ui/`), the Web UI's files under `/ui/`      | nothing (the UI logs in to Keycloak itself)      |
-| `GET /articles/{ref}`, `get_article`                                | an Access Token                                  |
-| `POST /query`, `POST /query/stream`, `ask_code_civil`               | an Access Token with the `code-civil-query` role |
+| Route or tool                                                                     | Requires                                         |
+| --------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `GET /health`, `GET /about`, `/.well-known/oauth-protected-resource/mcp`, `/docs` | nothing                                          |
+| `GET /` (redirects to `/ui/`), the Web UI's files under `/ui/`                    | nothing (the UI logs in to Keycloak itself)      |
+| `GET /articles/{ref}`, `get_article`                                              | an Access Token                                  |
+| `POST /query`, `POST /query/stream`, `ask_code_civil`                             | an Access Token with the `code-civil-query` role |
 
 The role guards what spends your OpenAI key. There's no setting to turn authentication off. Only
 two paths run without a token, because they have no network listener: the stdio MCP Server (see

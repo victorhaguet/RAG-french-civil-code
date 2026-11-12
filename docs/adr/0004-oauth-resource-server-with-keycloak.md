@@ -31,8 +31,9 @@ The demo users show the difference: `demo` holds the role, `reader` doesn't.
 
 **4. There is no switch to turn authentication off.** A fresh clone, a test run against a real
 server, and a deployment are all protected by default; there's no flag to forget in production.
-`/health` (the Docker healthcheck) and the Protected Resource Metadata (which a client reads
-before it has a token) stay public, as they must, and so does Swagger UI (`/docs`,
+`/health` (the Docker healthcheck), `/about` (About, the facts the Web UI's header shows before
+login: snapshot date, Article count, model; it spends nothing) and the Protected Resource
+Metadata (which a client reads before it has a token) stay public, as they must, and so does Swagger UI (`/docs`,
 `/openapi.json`), which only describes the API and logs in through Keycloak. The Web UI's files
 (`/`, which redirects to `/ui/`, and `/ui/`) are public for the same reason: they are only a page
 that logs in to Keycloak, and every call it makes sends the user's Access Token.
