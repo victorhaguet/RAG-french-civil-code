@@ -3,6 +3,19 @@
 # built/downloaded here at build time, so the container never downloads
 # anything at runtime. No secret is needed to build it -- ingestion only
 # embeds, it never calls OpenAI.
+
+# The Web UI, built in its own stage: only its output (static files) reaches
+# the final image, never Node or node_modules.
+FROM node:22-slim AS ui
+
+WORKDIR /ui
+RUN --mount=type=cache,target=/root/.npm \
+    --mount=type=bind,source=ui/package.json,target=package.json \
+    --mount=type=bind,source=ui/package-lock.json,target=package-lock.json \
+    npm ci
+COPY ui ./
+RUN npm run build
+
 FROM python:3.12-slim
 
 COPY --from=ghcr.io/astral-sh/uv:0.12.7 /uv /bin/uv
@@ -22,6 +35,7 @@ ENV EMBEDDING_MODEL=${EMBEDDING_MODEL} \
     NLTK_DATA=/opt/models/nltk_data \
     CHROMA_PERSIST_DIR=/app/data/chroma \
     ARTICLES_DB_PATH=/app/data/articles.db \
+    UI_DIST_DIR=/app/ui/dist \
     UV_LINK_MODE=copy \
     UV_COMPILE_BYTECODE=1 \
     UV_PYTHON_DOWNLOADS=never \
@@ -65,6 +79,10 @@ RUN python -m scripts.ingest \
 
 COPY --chown=app:app src ./src
 COPY --chown=app:app prompts ./prompts
+# The built Web UI, after the ingestion layers: a layer change rebuilds every
+# layer below it, so a UI change must come after the baked data, or it would
+# re-ingest the whole corpus.
+COPY --from=ui --chown=app:app /ui/dist ./ui/dist
 
 # From here on nothing may be downloaded: check every model the API loads
 # resolves from the baked caches alone.
