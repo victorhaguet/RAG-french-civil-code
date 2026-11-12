@@ -4,6 +4,10 @@ The same app serves the MCP server over Streamable HTTP at `/mcp`, built with
 the same cached providers as the REST routes, so both share one set of loaded
 models and one Access Token verifier. `/mcp` is an OAuth resource server: it
 requires a bearer token and serves its Protected Resource Metadata.
+
+It also serves the Web UI's static files at `/ui/`, and redirects `/` there.
+The UI is public: it logs in to Keycloak itself, then calls the API with the
+Access Token it got.
 """
 
 from __future__ import annotations
@@ -11,9 +15,11 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator, Callable, Iterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import AnyHttpUrl
@@ -220,8 +226,9 @@ def _mcp_auth_settings() -> AuthSettings:
 
 def create_app(
     token_verifier: Callable[[], TokenVerifier] = get_token_verifier,
+    ui_dir: str | Path = config.UI_DIST_DIR,
 ) -> FastAPI:
-    """Build the app: the REST routes, plus the MCP server mounted at `/mcp`.
+    """Build the app: the REST routes, the Web UI at `/ui/`, plus the MCP server mounted at `/mcp`.
 
     A factory because the MCP session manager runs once per instance: each
     app (and so each lifespan) needs its own.
@@ -232,6 +239,9 @@ def create_app(
             request. Defaults to the REST routes' cached one, trusting
             Keycloak's keys. (The REST routes resolve theirs through
             `app.dependency_overrides` instead.)
+        ui_dir (str | Path, optional): the built Web UI served at `/ui/`.
+            Defaults to `UI_DIST_DIR`. Not checked at startup: without a
+            build, the API still runs and `/ui/` is a 404.
 
     Returns:
         FastAPI: the app, ready to serve
@@ -265,6 +275,18 @@ def create_app(
         },
     )
     fastapi_app.include_router(router)
+
+    # `/ui` too: the mount below only matches `/ui/...`, and the MCP app
+    # mounted at the root would answer a bare `/ui` with a 404.
+    @fastapi_app.get("/", include_in_schema=False)
+    @fastapi_app.get("/ui", include_in_schema=False)
+    def to_web_ui() -> RedirectResponse:
+        """Send a browser opening the server to the Web UI."""
+        return RedirectResponse("/ui/")
+
+    # Before the MCP app: mounted at the root, it would otherwise catch `/`
+    # and `/ui/...`. `html=True` serves `index.html` for `/ui/`.
+    fastapi_app.mount("/ui", StaticFiles(directory=ui_dir, html=True, check_dir=False), name="ui")
     fastapi_app.mount("/", mcp_app)
     return fastapi_app
 

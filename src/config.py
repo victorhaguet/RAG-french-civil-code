@@ -56,6 +56,9 @@ OAUTH_JWKS_URL = os.getenv(
 )
 OAUTH_AUDIENCE = os.getenv("OAUTH_AUDIENCE", "http://localhost:8000/mcp")
 
+# The built Web UI (`npm run build` in ui/), served by the API at `/ui/`.
+UI_DIST_DIR = os.getenv("UI_DIST_DIR", "ui/dist")
+
 # Number of Articles `/query` returns when the caller doesn't pass `top_k`.
 DEFAULT_TOP_K = int(os.getenv("DEFAULT_TOP_K", "5"))
 
