@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+from collections.abc import Iterator
 from types import SimpleNamespace
 from typing import Any
 
@@ -59,12 +61,29 @@ class PassthroughCrossEncoder:
 
 
 class FakeChatModel:
-    """Records the prompts it was asked to answer; returns a canned reply."""
+    """Records the prompts it was asked to answer; returns a canned reply.
 
-    def __init__(self, answer: str = "Réponse générée.") -> None:
+    `stream` yields the same reply in several pieces (one per word, trailing
+    whitespace included), so the pieces joined are the reply. With
+    `fail_after`, it raises after yielding that many pieces, like a model
+    failing mid-generation.
+    """
+
+    FAILURE_DETAIL = "fake chat model failure: internal detail"
+
+    def __init__(self, answer: str = "Réponse générée.", fail_after: int | None = None) -> None:
         self.answer = answer
+        self.fail_after = fail_after
         self.invoke_calls: list[str] = []
+        self.stream_calls: list[str] = []
 
     def invoke(self, prompt: str) -> Any:
         self.invoke_calls.append(prompt)
         return SimpleNamespace(content=self.answer)
+
+    def stream(self, prompt: str) -> Iterator[Any]:
+        self.stream_calls.append(prompt)
+        for index, piece in enumerate(re.findall(r"\S+\s*", self.answer)):
+            if index == self.fail_after:
+                raise RuntimeError(self.FAILURE_DETAIL)
+            yield SimpleNamespace(content=piece)

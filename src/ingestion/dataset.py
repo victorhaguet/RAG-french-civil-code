@@ -3,13 +3,25 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Iterator
+from datetime import date
 from typing import Any, TypedDict, cast
 
 DATASET_NAME = "louisbrulenaudet/code-civil"
 DATASET_SPLIT = "train"
 # The dataset has no built-in version/timestamp field, so this is a manually
 # tracked snapshot date, updated whenever the corpus is re-ingested.
-DATASET_AS_OF = "21 September 2025"
+DATASET_AS_OF_DATE = date(2025, 9, 21)
+# The same date as English text, for the generation prompt and the MCP tool
+# descriptions. Month names are spelled out here rather than with `%B`, which
+# follows the process locale.
+_ENGLISH_MONTHS = (
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)
+DATASET_AS_OF = (
+    f"{DATASET_AS_OF_DATE.day} {_ENGLISH_MONTHS[DATASET_AS_OF_DATE.month - 1]} "
+    f"{DATASET_AS_OF_DATE.year}"
+)
 
 IN_FORCE_ETAT = "VIGUEUR"
 

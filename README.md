@@ -10,6 +10,9 @@ dataset on HuggingFace, filtered to articles currently in force, as a snapshot t
 address — it won't cover other codes, case law, or repealed provisions — and when a
 question falls outside what it retrieved, it says so plainly instead of guessing.
 
+Ask it from its [Web UI](#use-the-web-ui), from [Claude Code](#use-it-from-claude-code) over MCP,
+or through the [REST API](#usage).
+
 ## Setup
 
 **Prerequisites:** Python 3.12.
@@ -99,10 +102,41 @@ below). Keycloak's admin password comes from `.env`: set `KEYCLOAK_ADMIN_PASSWOR
 
 `.env` is also loaded into the API container at runtime (it's never copied into the image), and
 an `OPENAI_API_KEY` exported in your shell takes precedence over it. Without the key, the
-container still starts and serves `/health` and `/articles/{ref}` — only `/query` needs it. The
-API is published on `http://127.0.0.1:8000` and Keycloak on `http://localhost:8080`, both on
-localhost only, and the containers restart automatically unless you stop them
-(`docker compose down`).
+container still starts and serves `/health` and `/articles/{ref}` — only `/query` and
+`/query/stream` need it. The API is published on `http://127.0.0.1:8000` and Keycloak on
+`http://localhost:8080`, both on localhost only, and the containers restart automatically unless
+you stop them (`docker compose down`).
+
+### Use the Web UI
+
+Open `http://localhost:8000/`: it redirects to the Web UI (`/ui/`), which sends you to Keycloak's
+login page. Log in as `demo` (password `demo`), and you're back on the UI, ready to ask a question
+in French. The answer appears as it's generated: the direct answer ("Réponse"), then the Articles it
+relies on ("Fondement juridique"). Each Article the answer cites is a link: click it to read the
+Article's full text, section and in-force date. As `reader`, asking shows a message saying the
+account lacks the required role. **Se déconnecter** logs you out of Keycloak too, so reopening the
+page asks for the login again.
+
+![The Web UI answering « Je viens d'obtenir la nationalité américaine. Suis-je encore français ? »: a Réponse, then a Fondement juridique citing Article 23 as a link](docs/images/ui_screen.png)
+
+Use `localhost`, not `127.0.0.1`: the Keycloak client only allows redirects back to
+`http://localhost:8000/ui/*`.
+
+The UI is plain HTML, CSS and TypeScript in [`ui/`](ui), bundled with esbuild (no framework, and
+nothing loaded from a CDN). The Docker image builds it in its own stage. To work on it locally,
+with Node 22:
+
+```bash
+cd ui
+npm ci
+npm run build       # or `npm run watch` to rebuild on every change
+npm run typecheck   # tsc --noEmit
+npm test            # Vitest
+```
+
+`uv run uvicorn src.api.app:app --reload` then serves the build (`ui/dist/`) at
+`http://localhost:8000/ui/` (Keycloak must run: `docker compose up keycloak`). Without a build,
+the API still starts and `/ui/` is a `404`.
 
 ### Log in from Swagger
 
@@ -135,18 +169,20 @@ issues the short-lived signed JWT Access Tokens the API checks on each protected
 Keycloak's public keys, plus expiry, issuer and audience). The API never sees a password and never
 issues a token. ADR [0004](docs/adr/0004-oauth-resource-server-with-keycloak.md) records why.
 
-| Route or tool                                                       | Requires                                         |
-| ------------------------------------------------------------------- | ------------------------------------------------ |
-| `GET /health`, `/.well-known/oauth-protected-resource/mcp`, `/docs` | nothing                                          |
-| `GET /articles/{ref}`, `get_article`                                | an Access Token                                  |
-| `POST /query`, `ask_code_civil`                                     | an Access Token with the `code-civil-query` role |
+| Route or tool                                                                     | Requires                                         |
+| --------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `GET /health`, `GET /about`, `/.well-known/oauth-protected-resource/mcp`, `/docs` | nothing                                          |
+| `GET /` (redirects to `/ui/`), the Web UI's files under `/ui/`                    | nothing (the UI logs in to Keycloak itself)      |
+| `GET /articles/{ref}`, `get_article`                                              | an Access Token                                  |
+| `POST /query`, `POST /query/stream`, `ask_code_civil`                             | an Access Token with the `code-civil-query` role |
 
 The role guards what spends your OpenAI key. There's no setting to turn authentication off. Only
 two paths run without a token, because they have no network listener: the stdio MCP Server (see
 [stdio (local)](#stdio-local)) and the in-process evaluation (see [Evaluation](#evaluation)).
 
-Two pre-registered public clients log in with authorization code + PKCE, no secret:
+Three pre-registered public clients log in with authorization code + PKCE, no secret:
 
+- `web-ui`, the Web UI at `/ui/`: see [Use the Web UI](#use-the-web-ui);
 - `swagger-ui`, the **Authorize** button of `/docs`: see [Log in from Swagger](#log-in-from-swagger);
 - `claude-code`, Claude Code's MCP login: see
   [Use the MCP Server from Claude Code over HTTP](#use-the-mcp-server-from-claude-code-over-http).
@@ -163,8 +199,9 @@ The stack is set up for local development only. A real deployment still needs:
   HTTP. Keycloak also runs in dev mode (`start-dev`, in-memory database) and needs a production
   setup.
 - **Public URLs** for Keycloak and the API instead of `localhost`, in `KC_HOSTNAME`,
-  `OAUTH_ISSUER`, `OAUTH_JWKS_URL` and `OAUTH_AUDIENCE` (`compose.yaml`), and in the realm file's
-  redirect URIs and audience mapper. The MCP transport's localhost-only `Host`/`Origin` check
+  `OAUTH_ISSUER`, `OAUTH_JWKS_URL` and `OAUTH_AUDIENCE` (`compose.yaml`), in the realm file's
+  redirect URIs and audience mapper, and in the Web UI's `KEYCLOAK_URL` (`ui/src/config.ts`). The
+  MCP transport's localhost-only `Host`/`Origin` check
   (`src/api/app.py`) must allow the public host too.
 - **Real users**: remove `demo` and `reader`, whose passwords are public, and grant the
   `code-civil-query` role only to who may spend the key.
@@ -195,6 +232,28 @@ curl -X POST http://127.0.0.1:8000/query \
   ]
 }
 ```
+
+To get the answer as it's generated, use `POST /query/stream` with the same body. It sends one
+JSON object per line: the Retrieved Articles first, then the answer piece by piece, then `done` (or
+`error` if generation fails midway). `-N` turns off `curl`'s buffering so each line shows as it
+arrives:
+
+```bash
+curl -N -X POST http://127.0.0.1:8000/query/stream \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Quand une loi entre-t-elle en vigueur ?"}'
+```
+
+```json
+{"type":"articles","articles":[{"ref":"...","sectionParentTitre":"..."}]}
+{"type":"delta","text":"..."}
+{"type":"delta","text":"..."}
+{"type":"done"}
+```
+
+ADR [0005](docs/adr/0005-streamed-answer-as-ndjson-on-a-separate-endpoint.md) records why it's a
+separate endpoint and not Server-Sent Events.
 
 Questions must be asked in French; English questions are refused without retrieval. The reason is that the retrieval pipeline is using BM25 for hybrid retrieval and this can only work when both data language and query language are the same. Fetch the full text of a cited article by
 its `ref` (any valid Access Token, no role needed):
@@ -268,6 +327,12 @@ log in as one of the demo users (see "Log in from Swagger"). As `demo`, both too
 the `code-civil-query` role. To switch users, select **Clear authentication** in `/mcp` (or run
 `claude mcp logout code-civil-http`), log out at
 `http://localhost:8080/realms/code-civil/account`, then authenticate again.
+
+Once authenticated, ask Claude Code a civil-law question: it calls `code-civil-http` on its own and
+answers from the Retrieved Articles, here the same question as in the Web UI above, grounded in
+the same Article 23.
+
+![Claude Code answering « Je viens d'obtenir la nationalité américaine. Suis-je encore français ? » after calling code-civil-http, citing Art. 23 of the Code civil](docs/images/claude_code_screen.png)
 
 What happens under the hood is the standard MCP authorization flow:
 

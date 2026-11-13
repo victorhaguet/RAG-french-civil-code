@@ -1,12 +1,19 @@
 """The query pipeline: from a question to a grounded answer and its Retrieved Articles.
 
-Framework-free, so every interface (the REST API today) runs the exact same
-flow: Query Language gate, Hybrid Retrieval, reranking and generation.
+Framework-free, so every interface (the REST API, the MCP Server) runs the exact
+same flow: Query Language gate, Hybrid Retrieval, reranking and generation.
+
+The flow is split in two steps a caller can run on their own: `retrieve` (gate,
+Hybrid Retrieval, reranking, prompt rendering) and `generate` (the chat model
+call, or `generate_stream` to get the answer piece by piece), so the Retrieved
+Articles can be sent before the answer is generated. `answer_query` runs both
+in sequence.
 """
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any
 
@@ -50,6 +57,21 @@ class QueryResult:
 
     answer: str
     articles: list[Article]
+
+
+@dataclass(frozen=True)
+class Retrieval:
+    """The Retrieved Articles, in final order, and the generation prompt grounded in them."""
+
+    articles: list[Article]
+    prompt: str
+
+
+@dataclass(frozen=True)
+class Refusal:
+    """A question refused before retrieval, with the fixed answer to give back instead."""
+
+    answer: str
 
 
 def _ranked_refs_from_chunks(chunks: list[Document]) -> list[str]:
@@ -96,8 +118,8 @@ def _resolve_articles(refs: list[str], article_store: ArticleStore) -> list[Arti
     return articles
 
 
-def answer_query(question: str, top_k: int, pipeline: QueryPipeline) -> QueryResult:
-    """Retrieve the most relevant Articles via Hybrid Retrieval, rerank, and generate a grounded answer.
+def retrieve(question: str, top_k: int, pipeline: QueryPipeline) -> Retrieval | Refusal:
+    """Gate on the Query Language, retrieve via Hybrid Retrieval, rerank, and render the generation prompt.
 
     Args:
         question (str): the user's question
@@ -105,13 +127,13 @@ def answer_query(question: str, top_k: int, pipeline: QueryPipeline) -> QueryRes
         pipeline (QueryPipeline): the components the query runs through
 
     Returns:
-        QueryResult: the generated answer and the Retrieved Articles it was
-            grounded in (the fixed refusal and no Articles for a non-French question)
+        Retrieval | Refusal: the Retrieved Articles and the generation prompt
+            grounded in them, or the fixed refusal for a non-French question
     """
     logger.info("Query: %r", question)
     if detect_query_language(question) != "fr":
         logger.info("Non-French query refused before retrieval")
-        return QueryResult(answer=NON_FRENCH_REFUSAL, articles=[])
+        return Refusal(answer=NON_FRENCH_REFUSAL)
 
     fetch_k = max(config.FETCH_K_MULTIPLIER * top_k, config.MIN_FETCH_K)
 
@@ -133,9 +155,60 @@ def answer_query(question: str, top_k: int, pipeline: QueryPipeline) -> QueryRes
     articles = pipeline.reranker.rerank(question, candidate_articles)[:top_k]
     logger.info("Reranked to %d article(s)", len(articles))
 
-    prompt = render_prompt(question=question, articles=articles)
-    logger.info("Calling chat model...")
-    answer = pipeline.chat_model.invoke(prompt).content
-    logger.info("Chat model responded (%d chars)", len(answer))
+    return Retrieval(articles=articles, prompt=render_prompt(question=question, articles=articles))
 
-    return QueryResult(answer=answer, articles=articles)
+
+def generate(prompt: str, pipeline: QueryPipeline) -> str:
+    """Generate the answer to a rendered generation prompt with the chat model.
+
+    Args:
+        prompt (str): the generation prompt, as rendered by `retrieve`
+        pipeline (QueryPipeline): the components the query runs through
+
+    Returns:
+        str: the chat model's answer
+    """
+    logger.info("Calling chat model...")
+    answer: str = pipeline.chat_model.invoke(prompt).content
+    logger.info("Chat model responded (%d chars)", len(answer))
+    return answer
+
+
+def generate_stream(prompt: str, pipeline: QueryPipeline) -> Iterator[str]:
+    """Generate the answer to a rendered generation prompt, piece by piece, as the chat model streams it.
+
+    Args:
+        prompt (str): the generation prompt, as rendered by `retrieve`
+        pipeline (QueryPipeline): the components the query runs through
+
+    Yields:
+        str: the next non-empty piece of the answer; joined, the pieces are
+            the answer `generate` would return
+    """
+    logger.info("Streaming from chat model...")
+    length = 0
+    for message in pipeline.chat_model.stream(prompt):
+        piece: str = message.content
+        if piece:
+            length += len(piece)
+            yield piece
+    logger.info("Chat model finished streaming (%d chars)", length)
+
+
+def answer_query(question: str, top_k: int, pipeline: QueryPipeline) -> QueryResult:
+    """Answer a question in one shot: `retrieve`, then `generate` unless the question was refused.
+
+    Args:
+        question (str): the user's question
+        top_k (int): how many Retrieved Articles ground the answer
+        pipeline (QueryPipeline): the components the query runs through
+
+    Returns:
+        QueryResult: the generated answer and the Retrieved Articles it was
+            grounded in (the fixed refusal and no Articles for a non-French question)
+    """
+    retrieval = retrieve(question, top_k, pipeline)
+    if isinstance(retrieval, Refusal):
+        return QueryResult(answer=retrieval.answer, articles=[])
+
+    return QueryResult(answer=generate(retrieval.prompt, pipeline), articles=retrieval.articles)

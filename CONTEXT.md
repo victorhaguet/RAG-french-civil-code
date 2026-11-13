@@ -28,10 +28,10 @@ date — not yet actually repealed). Ingestion keeps `VIGUEUR` only.
 _Avoid_: Status, state (when referring to this specific field)
 
 **Query Language**:
-The detected language of a user's question, restricted to `fr` or `en`. `/query` refuses any
-question detected as `en` before retrieval, with a fixed English-only refusal; everything else
-(including an inconclusive detection) is treated as `fr` and proceeds normally. Articles and the
-generation prompt are French-only.
+The detected language of a user's question, restricted to `fr` or `en`. `/query` (and
+`/query/stream`) refuses any question detected as `en` before retrieval, with a fixed English-only
+refusal; everything else (including an inconclusive detection) is treated as `fr` and proceeds
+normally. Articles and the generation prompt are French-only.
 _Avoid_: Locale (this only distinguishes fr/en for the refusal gate, not full internationalization)
 
 **Keyword Index**:
@@ -69,6 +69,17 @@ states plainly that the question can't be answered from retrieval, reminds the u
 is Code civil only (as of `DATASET_AS_OF`), and invites rephrasing. Cites no Articles.
 _Avoid_: Fallback, no-answer (too vague — doesn't convey that persona is dropped)
 
+**Streamed Answer**:
+The response of `POST /query/stream`: the same pipeline as `/query`, sent as one JSON message per
+line (`application/x-ndjson`) as it runs. First, exactly once, an `articles` message carrying the
+Retrieved Articles (same shape as `/query`'s `articles`); then zero or more `delta` messages, the
+pieces of the answer in order, which joined give the answer `/query` would return; then, exactly
+once, `done`. If generation fails after streaming started, the stream ends with an `error` message
+(generic, no internal details) instead of `done`. A non-French question streams as no Articles and
+the fixed refusal as a single `delta`. See ADR 0005.
+_Avoid_: Stream (too vague: the chat model's own stream is a different thing), SSE, event stream,
+chunk (a Chunk is a piece of an Article, not of the answer)
+
 **MCP Server**:
 The interface that exposes the query pipeline to MCP hosts (e.g. Claude Code) as two tools:
 `ask_code_civil`, which returns a Grounded Answer or Out-of-Scope Answer together with the full
@@ -77,6 +88,21 @@ same in-process pipeline as `/query`, over stdio (a subprocess started by the ho
 Streamable HTTP (mounted in the API's app at `/mcp`, sharing its loaded models). Over HTTP it
 requires an Access Token, and `ask_code_civil` the Query Role; over stdio it is unauthenticated.
 _Avoid_: MCP (the protocol, not this server), plugin, agent, tool server
+
+**Web UI**:
+The browser interface served by the API at `/ui/` (`GET /` redirects there): plain HTML, CSS and
+TypeScript built from `ui/`. It logs in to the Authorization Server as the public client `web-ui`,
+then asks `POST /query/stream` a question with the user's Access Token and shows the Streamed Answer
+as it arrives. Its files are public; what it calls is not, except About, which fills its header.
+_Avoid_: Frontend, front, client (a Keycloak client is a different thing), app, website
+
+**About**:
+What `GET /about` returns, and what the Web UI's header presents: the dataset snapshot date
+(`DATASET_AS_OF_DATE`, as an ISO date), the number of Articles in the Article store, and the
+configured generation model. Read from the running server, so the header can't drift from it.
+Public, like `/health`: it needs no Access Token, and spends nothing. If it fails, the header
+keeps its title and disclaimer, without the facts.
+_Avoid_: Info, metadata, stats, version
 
 ## Authentication
 
@@ -90,8 +116,9 @@ _Avoid_: Auth server, identity provider, IdP (Keycloak can federate those; here 
 A short-lived (5 minutes) RS256-signed JWT issued by the Authorization Server, sent as
 `Authorization: Bearer <token>`. The API checks it locally: signature against the Authorization
 Server's JWKS, plus `exp`, `iss` (`OAUTH_ISSUER`), `aud` (`OAUTH_AUDIENCE`) and `sub`. Required by
-`POST /query`, `GET /articles/{ref}` and `/mcp`; `/health`, the Protected Resource Metadata and
-Swagger UI (`/docs`, `/openapi.json`) stay public.
+`POST /query`, `POST /query/stream`, `GET /articles/{ref}` and `/mcp`; `/health`, `/about`, the
+Protected Resource Metadata, Swagger UI (`/docs`, `/openapi.json`) and the Web UI's files (`/`,
+`/ui/`) stay public.
 _Avoid_: JWT (the format, not the role it plays), bearer token, API key, session
 
 **Identity**:
@@ -102,9 +129,9 @@ _Avoid_: User (the account lives in the Authorization Server), principal, sessio
 
 **Query Role**:
 The realm role `code-civil-query` (`QUERY_ROLE` in code), required by the operations that spend
-the OpenAI key: `POST /query` and `ask_code_civil`. Read-only operations (`GET /articles/{ref}`,
-`get_article`) only need a valid Access Token. A valid token without it gets a `403` on REST, or a
-tool error over MCP.
+the OpenAI key: `POST /query`, `POST /query/stream` and `ask_code_civil`. Read-only operations
+(`GET /articles/{ref}`, `get_article`) only need a valid Access Token. A valid token without it
+gets a `403` on REST, or a tool error over MCP.
 _Avoid_: Scope (OAuth scopes are what a client may ask for, not what a user may do), permission,
 admin role
 

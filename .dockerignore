@@ -15,3 +15,6 @@ data/
 .claude/
 .vscode/
 eval/results.md
+# The UI stage installs and builds its own.
+ui/node_modules/
+ui/dist/

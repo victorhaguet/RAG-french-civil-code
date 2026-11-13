@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 
+from src import config
 from src.api.app import app
 from src.ingestion.dataset import to_article
 from src.pipeline import NON_FRENCH_REFUSAL, _ranked_refs_from_chunks, _resolve_articles
@@ -32,6 +33,21 @@ def test_health_returns_a_liveness_check() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+def test_about_needs_no_token_and_describes_the_running_corpus(tmp_path: Path) -> None:
+    # No token: the Web UI's header shows these facts before the user logs in.
+    client = client_for(*ingest(tmp_path, _ROWS), FakeChatModel())
+
+    response = client.get("/about")
+
+    assert response.status_code == 200
+    # Of the two rows, only the VIGUEUR one is an ingested Article.
+    assert response.json() == {
+        "dataset_as_of": "2025-09-21",
+        "article_count": 1,
+        "model": config.OPENAI_MODEL,
+    }
 
 
 def test_query_returns_the_generated_answer_and_the_retrieved_articles(
