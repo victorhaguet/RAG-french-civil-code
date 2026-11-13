@@ -10,6 +10,9 @@ dataset on HuggingFace, filtered to articles currently in force, as a snapshot t
 address — it won't cover other codes, case law, or repealed provisions — and when a
 question falls outside what it retrieved, it says so plainly instead of guessing.
 
+Ask it from its [Web UI](#use-the-web-ui), from [Claude Code](#use-it-from-claude-code) over MCP,
+or through the [REST API](#usage).
+
 ## Setup
 
 **Prerequisites:** Python 3.12.
@@ -108,9 +111,13 @@ you stop them (`docker compose down`).
 
 Open `http://localhost:8000/`: it redirects to the Web UI (`/ui/`), which sends you to Keycloak's
 login page. Log in as `demo` (password `demo`), and you're back on the UI, ready to ask a question
-in French. The answer appears as it's generated. As `reader`, asking shows a message saying the
+in French. The answer appears as it's generated: the direct answer ("Réponse"), then the Articles it
+relies on ("Fondement juridique"). Each Article the answer cites is a link: click it to read the
+Article's full text, section and in-force date. As `reader`, asking shows a message saying the
 account lacks the required role. **Se déconnecter** logs you out of Keycloak too, so reopening the
 page asks for the login again.
+
+![The Web UI answering « Je viens d'obtenir la nationalité américaine. Suis-je encore français ? »: a Réponse, then a Fondement juridique citing Article 23 as a link](docs/images/ui_screen.png)
 
 Use `localhost`, not `127.0.0.1`: the Keycloak client only allows redirects back to
 `http://localhost:8000/ui/*`.
@@ -320,6 +327,12 @@ log in as one of the demo users (see "Log in from Swagger"). As `demo`, both too
 the `code-civil-query` role. To switch users, select **Clear authentication** in `/mcp` (or run
 `claude mcp logout code-civil-http`), log out at
 `http://localhost:8080/realms/code-civil/account`, then authenticate again.
+
+Once authenticated, ask Claude Code a civil-law question: it calls `code-civil-http` on its own and
+answers from the Retrieved Articles, here the same question as in the Web UI above, grounded in
+the same Article 23.
+
+![Claude Code answering « Je viens d'obtenir la nationalité américaine. Suis-je encore français ? » after calling code-civil-http, citing Art. 23 of the Code civil](docs/images/claude_code_screen.png)
 
 What happens under the hood is the standard MCP authorization flow:
 
