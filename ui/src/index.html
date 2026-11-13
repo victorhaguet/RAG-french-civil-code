@@ -52,10 +52,25 @@
         <p id="notice" class="notice" role="alert" hidden></p>
 
         <section id="answer-section" class="card answer" aria-live="polite" hidden>
-          <h2 class="answer__title">Réponse</h2>
+          <!-- Hidden on screen: a Grounded Answer brings its own headings ("Réponse",
+               "Fondement juridique"), and other answers read fine without one. -->
+          <h2 class="visually-hidden">Réponse</h2>
           <div id="answer" class="answer__text"></div>
         </section>
       </div>
+
+      <!-- Opened by a click on a citation link in the answer (articleModal.ts). -->
+      <dialog id="article-dialog" class="article-dialog" aria-labelledby="article-dialog-title">
+        <div class="article-dialog__content">
+          <div class="article-dialog__header">
+            <h2 id="article-dialog-title" class="article-dialog__title"></h2>
+            <button class="article-dialog__close" type="button" aria-label="Fermer">×</button>
+          </div>
+          <p class="article-dialog__section"></p>
+          <p class="article-dialog__text"></p>
+          <p class="article-dialog__date"></p>
+        </div>
+      </dialog>
     </main>
 
     <footer class="site-footer">

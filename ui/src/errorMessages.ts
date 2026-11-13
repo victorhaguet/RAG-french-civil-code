@@ -21,13 +21,15 @@ export type Failure =
   | { kind: "stream-error" };
 
 const GENERIC_ERROR = "Une erreur est survenue. Réessayez dans un instant.";
+/** Also shown when an Article can't be loaded for the same reason (`articles.ts`). */
+export const SESSION_EXPIRED = "Votre session a expiré. Rechargez la page pour vous reconnecter.";
 
 /** The French message to show for `failure`. */
 export function errorMessage(failure: Failure): string {
   switch (failure.kind) {
     case "http":
       if (failure.status === 401) {
-        return "Votre session a expiré. Rechargez la page pour vous reconnecter.";
+        return SESSION_EXPIRED;
       }
       if (failure.status === 403) {
         return "Votre compte n'a pas le rôle requis (code-civil-query) pour poser une question.";

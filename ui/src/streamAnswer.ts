@@ -6,11 +6,13 @@
 
 import { QUERY_STREAM_URL } from "./config";
 import type { Failure } from "./errorMessages";
-import { StreamParser, type ParsedEvent } from "./streamParser";
+import { StreamParser, type ArticleRef, type ParsedEvent } from "./streamParser";
 
 export interface StreamAnswerOptions {
   question: string;
   accessToken: string;
+  /** Called once, before any delta, with the Retrieved Articles. */
+  onArticles: (articles: ArticleRef[]) => void;
   /** Called with each piece of the answer, in order. */
   onDelta: (text: string) => void;
 }
@@ -22,6 +24,7 @@ export interface StreamAnswerOptions {
 export async function streamAnswer({
   question,
   accessToken,
+  onArticles,
   onDelta,
 }: StreamAnswerOptions): Promise<Failure | null> {
   let response: Response;
@@ -53,6 +56,8 @@ export async function streamAnswer({
       const eventFailure = toFailure(event);
       if (eventFailure !== null) {
         failure ??= eventFailure;
+      } else if (event.type === "articles") {
+        onArticles(event.articles);
       } else if (event.type === "delta") {
         onDelta(event.text);
       }

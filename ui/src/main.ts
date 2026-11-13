@@ -13,6 +13,9 @@ import {
   WEB_UI_PATH,
 } from "./config";
 import { fetchAbout, renderAboutFacts } from "./about";
+import { renderAnswer } from "./answerRenderer";
+import { setUpArticleModal } from "./articleModal";
+import { createArticleLoader } from "./articles";
 import { errorMessage } from "./errorMessages";
 import { streamAnswer } from "./streamAnswer";
 import "./styles.css";
@@ -66,6 +69,24 @@ async function main(): Promise<void> {
   const usernameLabel = element<HTMLElement>("username");
   const logout = element<HTMLAnchorElement>("logout");
 
+  /** A valid Access Token, refreshed first if it's about to expire. */
+  const freshAccessToken = async (): Promise<string> => {
+    await keycloak.updateToken(TOKEN_MIN_VALIDITY_SECONDS);
+    return keycloak.token ?? "";
+  };
+  const openArticle = setUpArticleModal(
+    element<HTMLDialogElement>("article-dialog"),
+    createArticleLoader({ getAccessToken: freshAccessToken }),
+  );
+  answer.addEventListener("click", (event) => {
+    const link = event.target instanceof Element ? event.target.closest("a.citation") : null;
+    const ref = link instanceof HTMLAnchorElement ? link.dataset.articleRef : undefined;
+    if (ref !== undefined) {
+      event.preventDefault();
+      void openArticle(ref);
+    }
+  });
+
   const username = keycloak.tokenParsed?.preferred_username;
   usernameLabel.textContent = typeof username === "string" ? username : "";
 
@@ -90,11 +111,21 @@ async function main(): Promise<void> {
     submit.disabled = true;
     answerSection.hidden = false;
     answerSection.setAttribute("aria-busy", "true");
-    answer.textContent = "";
+    answer.replaceChildren();
     showNotice(null);
+    // The answer's Markdown so far, re-rendered whole after each delta: at
+    // most once per frame, however fast the deltas come.
+    let markdown = "";
+    let articleRefs: string[] = [];
+    let pendingFrame: number | null = null;
+    const showAnswer = (partial: boolean): void => {
+      pendingFrame = null;
+      answer.innerHTML = renderAnswer(markdown, { articleRefs, partial });
+    };
     try {
+      let accessToken: string;
       try {
-        await keycloak.updateToken(TOKEN_MIN_VALIDITY_SECONDS);
+        accessToken = await freshAccessToken();
       } catch {
         // The Keycloak session itself is over: log in again.
         await keycloak.login();
@@ -102,16 +133,24 @@ async function main(): Promise<void> {
       }
       const failure = await streamAnswer({
         question: text,
-        accessToken: keycloak.token ?? "",
+        accessToken,
+        onArticles: (articles) => {
+          articleRefs = articles.map((article) => article.ref);
+        },
         onDelta: (piece) => {
-          answer.textContent += piece;
+          markdown += piece;
+          pendingFrame ??= requestAnimationFrame(() => showAnswer(true));
         },
       });
+      if (pendingFrame !== null) {
+        cancelAnimationFrame(pendingFrame);
+      }
+      showAnswer(false);
       if (failure !== null) {
         showNotice(errorMessage(failure));
       }
       // Nothing streamed (e.g. a 403): don't leave an empty answer box.
-      answerSection.hidden = answer.textContent === "";
+      answerSection.hidden = markdown === "";
     } finally {
       answerSection.removeAttribute("aria-busy");
       submit.disabled = false;

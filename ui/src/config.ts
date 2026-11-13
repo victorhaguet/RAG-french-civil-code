@@ -15,6 +15,9 @@ export const WEB_UI_PATH = "/ui/";
 /** The Streamed Answer endpoint, on the same origin that serves the UI. */
 export const QUERY_STREAM_URL = "/query/stream";
 
+/** Where an Article's full text is fetched: `${ARTICLES_URL}/{ref}`, same origin. */
+export const ARTICLES_URL = "/articles";
+
 /**
  * Refresh the Access Token before an API call if it expires within this
  * many seconds, so it can't expire while the answer streams in.
